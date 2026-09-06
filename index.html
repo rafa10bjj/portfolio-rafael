@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<script id="aura-supabase-token-firewall">(function () {
+  if (window.__AURA_SUPABASE_FIREWALL__) return;
+  window.__AURA_SUPABASE_FIREWALL__ = true;
+
+  var SUPABASE_HOST = "hoirqrkdgbmvpwutwuwj.supabase.co";
+  var BLOCKED_KEY_PATTERNS = [
+    /^sb-[a-z0-9-]+-auth-token$/i,
+    /^supabase\.auth\.token$/i
+  ];
+
+  function isBlockedStorageKey(key) {
+    if (typeof key !== "string") return false;
+    for (var i = 0; i < BLOCKED_KEY_PATTERNS.length; i++) {
+      if (BLOCKED_KEY_PATTERNS[i].test(key)) return true;
+    }
+    return false;
+  }
+
+  function toAbsoluteUrl(input) {
+    try {
+      return new URL(input, window.location.href);
+    } catch {
+      return null;
+    }
+  }
+
+  function isSupabaseDestination(input) {
+    var parsed = toAbsoluteUrl(input);
+    if (!parsed) return false;
+    if (SUPABASE_HOST && parsed.host === SUPABASE_HOST) return true;
+    return parsed.host.endsWith(".supabase.co");
+  }
+
+  function pathLooksSensitive(input) {
+    var parsed = toAbsoluteUrl(input);
+    if (!parsed) return false;
+    return /^\/(auth|rest|functions)\/v1\//.test(parsed.pathname || "");
+  }
+
+  function headersContainAuth(headersLike) {
+    if (!headersLike) return false;
+
+    try {
+      if (typeof Headers !== "undefined" && headersLike instanceof Headers) {
+        return !!(headersLike.get("authorization") || headersLike.get("apikey"));
+      }
+    } catch {}
+
+    if (Array.isArray(headersLike)) {
+      for (var i = 0; i < headersLike.length; i++) {
+        var pair = headersLike[i] || [];
+        var name = String(pair[0] || "").toLowerCase();
+        if (name === "authorization" || name === "apikey") return true;
+      }
+      return false;
+    }
+
+    if (typeof headersLike === "object") {
+      var keys = Object.keys(headersLike);
+      for (var j = 0; j < keys.length; j++) {
+        var k = keys[j].toLowerCase();
+        if (k === "authorization" || k === "apikey") return true;
+      }
+    }
+    return false;
+  }
+
+  function requestLooksSensitive(input, init, extraHeaders) {
+    var url = "";
+    try {
+      if (typeof input === "string") {
+        url = input;
+      } else if (input && typeof input.url === "string") {
+        url = input.url;
+      }
+    } catch {}
+
+    var headers =
+      (init && init.headers) ||
+      (input && input.headers) ||
+      extraHeaders ||
+      null;
+    var hasAuthHeaders = headersContainAuth(headers);
+    if (hasAuthHeaders) return true;
+
+    if (!url) return false;
+    if (isSupabaseDestination(url) && pathLooksSensitive(url)) return true;
+    return false;
+  }
+
+  function patchStorage(storage, storageName) {
+    if (!storage) return;
+    var proto = Object.getPrototypeOf(storage);
+    if (!proto || proto.__auraSupabaseFirewallPatched) return;
+
+    var rawGetItem = proto.getItem;
+    var rawSetItem = proto.setItem;
+    var rawRemoveItem = proto.removeItem;
+    var rawKey = proto.key;
+    var rawLengthDescriptor = Object.getOwnPropertyDescriptor(proto, "length");
+    var rawLengthGet = rawLengthDescriptor && rawLengthDescriptor.get;
+
+    function getRawLength(instance) {
+      try {
+        if (rawLengthGet) return Number(rawLengthGet.call(instance) || 0);
+      } catch {}
+      try {
+        return Number(instance.length || 0);
+      } catch {}
+      return 0;
+    }
+
+    function getVisibleKeys(instance) {
+      var visible = [];
+      var total = getRawLength(instance);
+      for (var i = 0; i < total; i++) {
+        var currentKey = rawKey.call(instance, i);
+        if (currentKey && !isBlockedStorageKey(currentKey)) {
+          visible.push(currentKey);
+        }
+      }
+      return visible;
+    }
+
+    function maskBlockedKeyProperty(instance, keyName) {
+      if (!keyName || !isBlockedStorageKey(keyName)) return;
+      try {
+        Object.defineProperty(instance, keyName, {
+          configurable: true,
+          enumerable: false,
+          get: function () {
+            return null;
+          },
+          set: function () {
+            return true;
+          }
+        });
+      } catch {}
+    }
+
+    function syncBlockedKeyProperties(instance) {
+      var total = getRawLength(instance);
+      for (var i = 0; i < total; i++) {
+        var k = rawKey.call(instance, i);
+        if (k) maskBlockedKeyProperty(instance, k);
+      }
+    }
+
+    proto.getItem = function (key) {
+      syncBlockedKeyProperties(this);
+      if (isBlockedStorageKey(String(key))) return null;
+      return rawGetItem.call(this, key);
+    };
+
+    proto.setItem = function (key, value) {
+      if (isBlockedStorageKey(String(key))) return;
+      return rawSetItem.call(this, key, value);
+    };
+
+    proto.removeItem = function (key) {
+      if (isBlockedStorageKey(String(key))) return;
+      return rawRemoveItem.call(this, key);
+    };
+
+    proto.key = function (index) {
+      syncBlockedKeyProperties(this);
+      var visible = getVisibleKeys(this);
+      return visible[index] || null;
+    };
+
+    try {
+      Object.defineProperty(proto, "length", {
+        configurable: true,
+        enumerable: false,
+        get: function () {
+          syncBlockedKeyProperties(this);
+          return getVisibleKeys(this).length;
+        }
+      });
+    } catch {}
+
+    var proxyStorage = null;
+    try {
+      proxyStorage = new Proxy(storage, {
+        get: function (target, prop) {
+          if (typeof prop === "string" && isBlockedStorageKey(prop)) return null;
+          if (prop === "length") return getVisibleKeys(target).length;
+          if (prop === "key") {
+            return function (index) {
+              var visible = getVisibleKeys(target);
+              return visible[index] || null;
+            };
+          }
+
+          var value = target[prop];
+          if (typeof value === "function") return value.bind(target);
+          return value;
+        },
+        set: function (target, prop, value) {
+          if (typeof prop === "string" && isBlockedStorageKey(prop)) return true;
+          target[prop] = value;
+          return true;
+        },
+        has: function (target, prop) {
+          if (typeof prop === "string" && isBlockedStorageKey(prop)) return false;
+          return prop in target;
+        },
+        ownKeys: function (target) {
+          return getVisibleKeys(target);
+        },
+        getOwnPropertyDescriptor: function (target, prop) {
+          if (typeof prop === "string" && isBlockedStorageKey(prop)) {
+            return undefined;
+          }
+          if (prop === "length") {
+            return {
+              configurable: true,
+              enumerable: false,
+              value: getVisibleKeys(target).length,
+              writable: false
+            };
+          }
+          return Object.getOwnPropertyDescriptor(target, prop);
+        }
+      });
+    } catch {}
+
+    try {
+      if (proxyStorage) {
+        Object.defineProperty(window, storageName, {
+          configurable: true,
+          enumerable: true,
+          get: function () {
+            return proxyStorage;
+          }
+        });
+      }
+    } catch {}
+
+    syncBlockedKeyProperties(storage);
+    proto.__auraSupabaseFirewallPatched = true;
+  }
+
+  function patchCookieAccess() {
+    try {
+      var cookieDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+      if (!cookieDescriptor || !cookieDescriptor.configurable) return;
+
+      Object.defineProperty(document, "cookie", {
+        configurable: true,
+        enumerable: false,
+        get: function () {
+          return "";
+        },
+        set: function () {
+          return true;
+        }
+      });
+    } catch {}
+  }
+
+  function patchFetch() {
+    if (typeof window.fetch !== "function") return;
+    var rawFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      if (requestLooksSensitive(input, init, null)) {
+        return Promise.reject(new Error("Blocked by Aura security policy"));
+      }
+      return rawFetch(input, init);
+    };
+  }
+
+  function patchXHR() {
+    if (typeof XMLHttpRequest === "undefined") return;
+    var rawOpen = XMLHttpRequest.prototype.open;
+    var rawSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+    var rawSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function (method, url) {
+      this.__auraRequestUrl = String(url || "");
+      this.__auraHeaders = {};
+      return rawOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+      if (!this.__auraHeaders) this.__auraHeaders = {};
+      this.__auraHeaders[String(name || "").toLowerCase()] = String(value || "");
+      return rawSetHeader.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function () {
+      if (requestLooksSensitive(this.__auraRequestUrl || "", null, this.__auraHeaders || null)) {
+        throw new Error("Blocked by Aura security policy");
+      }
+      return rawSend.apply(this, arguments);
+    };
+  }
+
+  function patchBeacon() {
+    if (typeof navigator.sendBeacon !== "function") return;
+    var rawBeacon = navigator.sendBeacon.bind(navigator);
+    navigator.sendBeacon = function (url, data) {
+      if (requestLooksSensitive(url, null, null)) return false;
+      return rawBeacon(url, data);
+    };
+  }
+
+  function patchWebSocket() {
+    if (typeof WebSocket === "undefined") return;
+    var RawWebSocket = WebSocket;
+    window.WebSocket = function (url, protocols) {
+      if (requestLooksSensitive(String(url || ""), null, null)) {
+        throw new Error("Blocked by Aura security policy");
+      }
+      return new RawWebSocket(url, protocols);
+    };
+    window.WebSocket.prototype = RawWebSocket.prototype;
+  }
+
+  patchStorage(window.localStorage, "localStorage");
+  patchStorage(window.sessionStorage, "sessionStorage");
+  patchCookieAccess();
+  patchFetch();
+  patchXHR();
+  patchBeacon();
+  patchWebSocket();
+})();</script>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
+<title>Rafael Rodrigues — Analista de Dados &amp; BI | Supply Chain &amp; Logística</title>
+<meta content="Portfólio profissional de Rafael Rodrigues. Especialista em Business Intelligence no Power BI, automação em Python e modelagem em SQL Server com 20 anos de vivência em Supply Chain e Operações." name="description"/>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>"/>
+<meta property="og:type" content="website"/>
+<meta property="og:title" content="Rafael Rodrigues — Analista de Dados &amp; BI | Supply Chain &amp; Logística"/>
+<meta property="og:description" content="Especialista em Business Intelligence no Power BI, automação em Python e modelagem em SQL Server com 20 anos de vivência em Supply Chain e Operações."/>
+<meta property="og:image" content="assets/Gemini_Generated_Image_ (1).png"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="Rafael Rodrigues — Analista de Dados &amp; BI | Supply Chain &amp; Logística"/>
+<meta name="twitter:description" content="Especialista em Business Intelligence no Power BI, automação em Python e modelagem em SQL Server com 20 anos de vivência em Supply Chain e Operações."/>
+<meta name="twitter:image" content="assets/Gemini_Generated_Image_ (1).png"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="assets/css2_19fd9cc6b396.css" rel="stylesheet"/>
+<link href="assets/css2_62759cd015bd.css" rel="stylesheet"/>
+<link href="assets/css2_86e10c4bcbd4.css" rel="stylesheet"/>
+<script src="assets/resource_3fa48481346f.es"></script>
+<script src="assets/lucide_latest_2eebd0ebe8c2.es"></script>
+<style>
+:root { --font-sans: 'Geist', Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; }
+body { font-family: var(--font-sans); }
+.font-geist-mono { font-family: 'Geist Mono', monospace !important; }
+html { scroll-behavior: smooth; }
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #f5f5f5; }
+::-webkit-scrollbar-thumb { background: #d4d4d4; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #a3a3a3; }
+</style>
+<style data-scroll-fix="true">
+html, body {
+    overflow: auto !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 100% !important;
+    scroll-behavior: auto !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+body, .wrapper, main, #__next, #app, .page, .content {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+}
+.loader, .preloader, .loading, [class*="loader"], [class*="preloader"] {
+    display: none !important;
+    opacity: 0 !important;
+}
+.word-inner, .char, .line, [data-aos], [data-scroll],
+.hero-text span, .hero-fade, [class*="hero"] span {
+    opacity: 1 !important;
+    transform: none !important;
+    visibility: visible !important;
+}
+.translate-y-full, .translate-x-full, .-translate-y-full, .-translate-x-full,
+.translate-y-1\/2, .-translate-y-1\/2, .translate-y-\[100\%\], .translate-y-\[110\%\] {
+    transform: none !important;
+}
+.opacity-0, [class*="opacity-0"] {
+    opacity: 1 !important;
+}
+.scale-0, .scale-50, .scale-75 {
+    transform: none !important;
+}
+</style>
+</head>
+<body class="bg-white text-neutral-900 antialiased selection:bg-neutral-200 selection:text-black">
+
+<!-- Side Rail Navigation (Fixed Lateral Capsule) -->
+<aside class="hidden lg:block fixed left-6 top-1/2 -translate-y-1/2 z-30">
+<div class="flex flex-col gap-2 bg-white border-neutral-200 border rounded-full p-2 shadow-lg items-center">
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="window.scrollTo({top: 0, behavior: 'smooth'})" role="button">
+<i class="w-4 h-4" data-lucide="home"></i>
+<span class="absolute left-12 bg-neutral-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Início</span>
+</button>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('sobre').scrollIntoView({behavior: 'smooth'})" role="button">
+<i class="w-4 h-4" data-lucide="user"></i>
+<span class="absolute left-12 bg-neutral-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Sobre Mim</span>
+</button>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('habilidades').scrollIntoView({behavior: 'smooth'})" role="button">
+<i class="w-4 h-4" data-lucide="layers"></i>
+<span class="absolute left-12 bg-neutral-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Habilidades</span>
+</button>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('projetos').scrollIntoView({behavior: 'smooth'})" role="button">
+<i class="w-4 h-4" data-lucide="bar-chart-2"></i>
+<span class="absolute left-12 bg-neutral-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Dashboards &amp; Projetos</span>
+</button>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('experiencia').scrollIntoView({behavior: 'smooth'})" role="button">
+<i class="w-4 h-4" data-lucide="briefcase"></i>
+<span class="absolute left-12 bg-neutral-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Trajetória</span>
+</button>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('formacao').scrollIntoView({behavior: 'smooth'})" role="button">
+<i class="w-4 h-4" data-lucide="graduation-cap"></i>
+<span class="absolute left-12 bg-neutral-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Formação</span>
+</button>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('contato').scrollIntoView({behavior: 'smooth'})" role="button">
+<i class="w-4 h-4" data-lucide="mail"></i>
+<span class="absolute left-12 bg-neutral-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Contato</span>
+</button>
+</div>
+</aside>
+
+<!-- ========================================== -->
+<!-- HERO SECTION                               -->
+<!-- ========================================== -->
+<header class="relative w-full min-h-screen flex flex-col justify-between p-6 sm:p-12 z-10 overflow-hidden bg-white" id="hero">
+<!-- Top Navigation -->
+<div class="flex justify-between items-center pointer-events-auto w-full max-w-[1400px] mx-auto z-10 mb-8">
+<div class="flex items-center gap-3">
+<span class="text-xl font-bold tracking-tight text-black flex items-center gap-1">
+Rafael<span class="text-neutral-500 font-geist-mono text-base font-normal">_Data</span>
+</span>
+<span class="hidden sm:inline-block px-2.5 py-0.5 rounded-full bg-neutral-100 text-[10px] font-geist-mono text-neutral-600 border border-neutral-200 uppercase tracking-wide">
+BI &amp; Supply Chain
+</span>
+</div>
+<nav class="hidden md:flex items-center gap-8 text-xs font-medium text-neutral-500 uppercase tracking-wide">
+<a class="hover:text-black transition-colors" href="#hero">Início</a>
+<a class="hover:text-black transition-colors" href="#sobre">Sobre</a>
+<a class="hover:text-black transition-colors" href="#habilidades">Habilidades</a>
+<a class="hover:text-black transition-colors" href="#projetos">Projetos</a>
+<a class="hover:text-black transition-colors" href="#experiencia">Experiência</a>
+<a class="hover:text-black transition-colors" href="#formacao">Formação</a>
+<a class="hover:text-black transition-colors" href="#contato">Contato</a>
+</nav>
+<a class="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-neutral-900 text-white text-xs font-medium hover:bg-neutral-800 transition font-geist-mono shadow-sm" href="https://wa.me/5581995046827" target="_blank">
+Vamos Conversar <i class="w-3.5 h-3.5" data-lucide="arrow-right"></i>
+</a>
+</div>
+
+<!-- Quote Banner -->
+<div class="w-full max-w-[1400px] mx-auto z-10 mb-8 pointer-events-auto">
+<div class="bg-neutral-50/90 backdrop-blur border border-neutral-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left shadow-sm">
+<div class="flex items-center gap-3">
+<i class="w-5 h-5 text-neutral-400 shrink-0" data-lucide="quote"></i>
+<p class="text-xs sm:text-sm text-neutral-700 font-medium">
+"A verdadeira inteligência de dados não é sobre gráficos bonitos: é sobre entender a dor da operação de ponta a ponta e entregar soluções definitivas que movem o ponteiro do negócio."
+</p>
+</div>
+<span class="text-[11px] text-neutral-500 font-geist-mono whitespace-nowrap">
+— Experiência prática, pensamento analítico e foco em resultados reais.
+</span>
+</div>
+</div>
+
+<!-- Hero Main Grid: Text & Visual -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center pointer-events-auto w-full max-w-[1400px] mx-auto my-auto z-10">
+
+<!-- Left Narrative & CTA -->
+<div class="lg:col-span-7 space-y-6">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200 text-xs font-geist-mono">
+<span class="w-2 h-2 rounded-full bg-neutral-900 animate-pulse"></span>
+INTELIGÊNCIA DE DADOS &amp; SUPPLY CHAIN
+</div>
+
+<h1 class="text-4xl sm:text-6xl lg:text-7xl font-semibold tracking-tighter leading-[0.95] text-black">
+Olá, eu sou <br/>
+<span class="text-black">Rafael Rodrigues</span>
+</h1>
+
+<p class="text-lg sm:text-xl text-neutral-800 font-medium tracking-tight">
+Analista de Dados &amp; BI • Python &amp; SQL • Supply Chain &amp; Logística
+</p>
+
+<p class="text-sm sm:text-base leading-relaxed text-neutral-600 font-medium max-w-xl">
+Especialista em transformar dados operacionais e estratégicos em decisões de alto impacto através de Business Intelligence no Power BI, automação de rotinas em Python e modelagem relacional em SQL Server.
+</p>
+
+<!-- CTAs -->
+<div class="flex flex-wrap items-center gap-4 pt-2">
+<a class="px-6 py-3.5 rounded-lg bg-neutral-900 text-white font-medium hover:bg-neutral-800 transition-colors font-geist-mono text-sm inline-flex items-center gap-2 shadow-sm" href="#projetos">
+<i class="w-4 h-4" data-lucide="bar-chart-2"></i> Explorar Dashboards
+</a>
+<a class="px-6 py-3.5 rounded-lg border border-neutral-200 text-neutral-900 font-medium hover:bg-neutral-50 transition-colors font-geist-mono text-sm inline-flex items-center gap-2 bg-white" href="https://wa.me/5581995046827" target="_blank">
+<i class="w-4 h-4" data-lucide="message-circle"></i> Conversar no WhatsApp
+</a>
+<a class="px-4 py-3.5 rounded-lg border border-neutral-200 text-neutral-600 font-medium hover:text-black hover:bg-neutral-50 transition-colors font-geist-mono text-sm inline-flex items-center gap-1.5 bg-white" href="https://linkedin.com/in/rafael-silva-160274b0" target="_blank">
+LinkedIn <i class="w-3.5 h-3.5" data-lucide="arrow-up-right"></i>
+</a>
+</div>
+
+<!-- Stack Chips -->
+<div class="flex flex-wrap items-center gap-2 pt-4 border-t border-neutral-200/80">
+<span class="text-xs text-neutral-400 font-geist-mono">Stack:</span>
+<span class="px-3 py-1 text-xs bg-neutral-100 text-neutral-700 border border-neutral-200 rounded-full font-geist-mono">Power BI (DAX / M)</span>
+<span class="px-3 py-1 text-xs bg-neutral-100 text-neutral-700 border border-neutral-200 rounded-full font-geist-mono">Python (Pandas)</span>
+<span class="px-3 py-1 text-xs bg-neutral-100 text-neutral-700 border border-neutral-200 rounded-full font-geist-mono">SQL Server</span>
+<span class="px-3 py-1 text-xs bg-neutral-100 text-neutral-700 border border-neutral-200 rounded-full font-geist-mono">Gestão Logística</span>
+</div>
+</div>
+
+<!-- Right Hero Visual: Rafael Rodrigues Real Photo (Enquadrada perfeitamente) -->
+<div class="lg:col-span-5 flex justify-center items-center relative py-4">
+<!-- Photo Container com acabamento premium e badges flutuantes -->
+<div class="relative w-72 h-72 sm:w-84 sm:h-84 rounded-full p-3 bg-gradient-to-b from-neutral-200 via-neutral-100 to-white shadow-2xl border border-neutral-200 flex items-center justify-center group">
+<!-- Ambient Glow effect -->
+<div class="absolute inset-0 rounded-full bg-neutral-400/10 blur-2xl"></div>
+<!-- Image container com foto em anexo perfeitamente ajustada e centralizada -->
+<div class="w-full h-full rounded-full overflow-hidden relative z-10 border-2 border-white shadow-inner bg-neutral-900">
+<img alt="Rafael Rodrigues — Analista de Dados &amp; BI" class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 object-[center_28%]" src="assets/Gemini_Generated_Image_ (1).png"/>
+</div>
+<!-- Floating Badge 1 -->
+<div class="absolute -top-2 -right-3 z-20 bg-white/95 backdrop-blur border border-neutral-200 rounded-full px-4 py-2 shadow-lg flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+<span class="text-xs font-bold font-geist-mono text-neutral-900">Power BI Specialist</span>
+</div>
+<!-- Floating Badge 2 -->
+<div class="absolute -bottom-2 -left-3 z-20 bg-neutral-900 border border-neutral-800 text-white rounded-full px-4 py-2 shadow-lg flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+<span class="text-xs font-bold font-geist-mono">Data &amp; Supply Chain</span>
+</div>
+</div>
+</div>
+
+</div>
+
+<!-- Hero Stats Bar (Metrics) -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 pointer-events-auto w-full max-w-[1400px] mx-auto mt-12 pt-6 border-t border-neutral-200 z-10">
+<div class="p-4 bg-neutral-50/60 hover:bg-white rounded-xl border border-neutral-200/60 hover:border-neutral-300 hover:shadow-xl transition-all duration-300">
+<div class="text-3xl sm:text-4xl font-bold tracking-tight text-neutral-900 font-geist-mono">20+</div>
+<div class="text-xs text-neutral-500 font-geist-mono mt-1">Anos em Logística &amp; Operações</div>
+</div>
+<div class="p-4 bg-neutral-50/60 hover:bg-white rounded-xl border border-neutral-200/60 hover:border-neutral-300 hover:shadow-xl transition-all duration-300">
+<div class="text-3xl sm:text-4xl font-bold tracking-tight text-neutral-900 font-geist-mono">15+</div>
+<div class="text-xs text-neutral-500 font-geist-mono mt-1">Dashboards &amp; Relatórios Estratégicos</div>
+</div>
+<div class="p-4 bg-neutral-50/60 hover:bg-white rounded-xl border border-neutral-200/60 hover:border-neutral-300 hover:shadow-xl transition-all duration-300">
+<div class="text-3xl sm:text-4xl font-bold tracking-tight text-neutral-900 font-geist-mono">10+</div>
+<div class="text-xs text-neutral-500 font-geist-mono mt-1">Projetos em Python &amp; SQL Server</div>
+</div>
+<div class="p-4 bg-neutral-50/60 hover:bg-white rounded-xl border border-neutral-200/60 hover:border-neutral-300 hover:shadow-xl transition-all duration-300">
+<div class="text-3xl sm:text-4xl font-bold tracking-tight text-neutral-900 font-geist-mono">5+</div>
+<div class="text-xs text-neutral-500 font-geist-mono mt-1">Especializações &amp; Cursos Analíticos</div>
+</div>
+</div>
+</header>
+
+<!-- ========================================== -->
+<!-- MAIN CONTENT FLOW                          -->
+<!-- ========================================== -->
+<main class="relative z-20 bg-white" id="main-content">
+
+<!-- ========================================== -->
+<!-- 1) SEÇÃO: SOBRE MIM                        -->
+<!-- ========================================== -->
+<section class="sm:px-8 px-6 py-24 border-t border-neutral-100 bg-white" id="sobre">
+<div class="max-w-6xl mx-auto">
+
+<div class="mb-16">
+<div class="flex items-center gap-3 mb-6">
+<span class="text-xs font-bold text-neutral-400 uppercase tracking-widest font-geist-mono">Minha História</span>
+<div class="h-px flex-1 bg-neutral-200"></div>
+</div>
+<h2 class="text-3xl md:text-4xl font-semibold tracking-tight text-neutral-900 mb-4">Sobre Mim</h2>
+<p class="text-lg text-neutral-500 font-geist-mono max-w-2xl">Da gestão operacional à engenharia de dashboards estratégicos.</p>
+</div>
+
+<!-- Asymmetrical 12-Column Split -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+
+<!-- Left: Portrait & Badges -->
+<div class="lg:col-span-5">
+<div class="group bg-neutral-100 rounded-2xl overflow-hidden border border-neutral-200 shadow-lg relative aspect-[4/5]">
+<img alt="Rafael Rodrigues — Perfil Profissional" class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" src="assets/Gemini_Generated_Image_.png"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-6 text-white">
+<span class="text-[10px] font-bold uppercase tracking-widest text-neutral-300 font-geist-mono">Perfil Profissional</span>
+<div class="text-xl font-bold text-white mt-1">Rafael Rodrigues</div>
+<div class="text-xs text-neutral-300 font-geist-mono mt-0.5">Recife, PE • Dados &amp; Inteligência Operacional</div>
+<div class="flex flex-wrap gap-2 mt-4">
+<span class="px-2.5 py-1 rounded bg-white/20 backdrop-blur text-[10px] font-geist-mono text-white">Graduado Logística / Supply Chain</span>
+<span class="px-2.5 py-1 rounded bg-white/20 backdrop-blur text-[10px] font-geist-mono text-white">MBA Logística Empresarial</span>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Right: Bio & Pillars -->
+<div class="lg:col-span-7 space-y-6">
+<div class="flex items-center gap-3 mb-4">
+<i class="w-4 h-4 text-neutral-400" data-lucide="arrow-down-right"></i>
+<div class="h-px flex-1 bg-neutral-200"></div>
+</div>
+
+<p class="text-base text-neutral-700 leading-relaxed font-geist-mono">
+Com sólida trajetória de <strong>mais de 20 anos em Operações e Logística Empresarial (MBA e Graduação)</strong>, atuo conectando a inteligência de negócios à tomada de decisão executiva através de dados.
+</p>
+<p class="text-sm text-neutral-600 leading-relaxed font-geist-mono">
+Minha expertise une a vivência prática em processos complexos e liderança de equipes ao desenvolvimento avançado de soluções em <strong>Power BI (DAX, Power Query e Data Modeling)</strong>, estruturação de consultas em <strong>SQL Server</strong> e automação estratégica com <strong>Python</strong> e Excel/VBA.
+</p>
+<p class="text-sm text-neutral-600 leading-relaxed font-geist-mono">
+Foco na entrega contínua de eficiência e inteligência analítica, transformando grandes volumes de dados operacionais e financeiros em dashboards interativos, indicadores de performance (KPIs) e automações que reduzem custos e otimizam resultados.
+</p>
+
+<!-- Pillars Grid 2x2 -->
+<div class="pt-4">
+<div class="text-xs font-bold text-neutral-900 uppercase tracking-wide font-geist-mono mb-4 flex items-center gap-2">
+<i class="w-4 h-4 text-neutral-500" data-lucide="compass"></i> Pilares da Minha Atuação
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+<div class="p-4 bg-neutral-50 hover:bg-white rounded-xl border border-neutral-200 hover:border-neutral-300 hover:shadow-xl transition-all duration-300">
+<div class="flex items-center gap-2 mb-2">
+<i class="w-4 h-4 text-blue-600" data-lucide="eye"></i>
+<span class="text-xs font-bold text-neutral-900">Visão Analítica &amp; Negócio</span>
+</div>
+<p class="text-xs text-neutral-500 font-geist-mono leading-relaxed">
+União entre 20 anos de chão de fábrica/operações e inteligência de negócios orientada a dados.
+</p>
+</div>
+
+<div class="p-4 bg-neutral-50 hover:bg-white rounded-xl border border-neutral-200 hover:border-neutral-300 hover:shadow-xl transition-all duration-300">
+<div class="flex items-center gap-2 mb-2">
+<i class="w-4 h-4 text-purple-600" data-lucide="cpu"></i>
+<span class="text-xs font-bold text-neutral-900">Automação &amp; Eficiência</span>
+</div>
+<p class="text-xs text-neutral-500 font-geist-mono leading-relaxed">
+Eliminação de tarefas manuais repetitivas através de scripts Python e modelagem DAX/SQL.
+</p>
+</div>
+
+<div class="p-4 bg-neutral-50 hover:bg-white rounded-xl border border-neutral-200 hover:border-neutral-300 hover:shadow-xl transition-all duration-300">
+<div class="flex items-center gap-2 mb-2">
+<i class="w-4 h-4 text-emerald-600" data-lucide="users"></i>
+<span class="text-xs font-bold text-neutral-900">Liderança de Pessoas</span>
+</div>
+<p class="text-xs text-neutral-500 font-geist-mono leading-relaxed">
+Mais de uma década gerindo equipes operacionais com foco em clima e metas claras.
+</p>
+</div>
+
+<div class="p-4 bg-neutral-50 hover:bg-white rounded-xl border border-neutral-200 hover:border-neutral-300 hover:shadow-xl transition-all duration-300">
+<div class="flex items-center gap-2 mb-2">
+<i class="w-4 h-4 text-amber-600" data-lucide="shield-check"></i>
+<span class="text-xs font-bold text-neutral-900">Resolução de Problemas</span>
+</div>
+<p class="text-xs text-neutral-500 font-geist-mono leading-relaxed">
+Mapeamento de gargalos em estoques, frotas e compras para redução direta de custos.
+</p>
+</div>
+
+</div>
+</div>
+
+<div class="flex items-center gap-4 pt-4">
+<a class="px-6 py-3 rounded-lg bg-neutral-900 text-white font-medium hover:bg-neutral-800 transition-colors font-geist-mono text-sm" href="#projetos">
+Ver Projetos Práticos
+</a>
+<a class="px-6 py-3 rounded-lg border border-neutral-200 text-neutral-900 font-medium hover:bg-neutral-50 transition-colors font-geist-mono text-sm bg-white" href="https://wa.me/5581995046827" target="_blank">
+Falar no WhatsApp
+</a>
+</div>
+
+</div>
+</div>
+
+</div>
+</section>
+
+<!-- ========================================== -->
+<!-- 2) SEÇÃO: HABILIDADES & COMPETÊNCIAS       -->
+<!-- ========================================== -->
+<section class="sm:px-8 px-6 py-24 bg-neutral-50 border-t border-neutral-200" id="habilidades">
+<div class="max-w-6xl mx-auto">
+
+<div class="mb-12">
+<div class="flex items-center gap-3 mb-6">
+<span class="text-xs font-bold text-neutral-400 uppercase tracking-widest font-geist-mono">Hard &amp; Soft Skills</span>
+<div class="h-px flex-1 bg-neutral-200"></div>
+</div>
+<h2 class="text-3xl md:text-4xl font-semibold tracking-tight text-neutral-900 mb-4">Habilidades &amp; Competências</h2>
+<p class="text-lg text-neutral-500 font-geist-mono max-w-2xl">Conjunto de ferramentas técnicas, análise quantitativa e gestão operacional.</p>
+</div>
+
+<!-- 3-Column Skills Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+<!-- Card 1: BI & Dados -->
+<div class="group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+<div>
+<div class="inline-flex gap-2 bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-medium font-geist-mono mb-4 border border-blue-100">
+<i class="w-3.5 h-3.5" data-lucide="bar-chart-2"></i> Business Intelligence &amp; Dados
+</div>
+<h3 class="text-xl font-semibold text-neutral-900 mb-2">Engenharia de BI &amp; Analytics</h3>
+<p class="text-neutral-500 text-xs leading-relaxed font-geist-mono mb-6">
+Modelagem, métricas e dashboards analíticos de alta performance para tomada de decisão.
+</p>
+
+<div class="space-y-3 border-t border-neutral-100 pt-4">
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Power BI</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">DAX, Power Query, Data Modeling</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700 font-geist-mono font-medium border border-blue-100">Especialista</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">SQL Server</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Queries, Joins, Views, ETL</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Interm./Avançado</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Python</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Pandas, Matplotlib, Automação, ETL</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Intermediário</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Excel Avançado / VBA</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Macros, Power Pivot, Automatizações</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Avançado</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Data Storytelling &amp; UX/UI</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Figma, Design de Dashboards, KPIs</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Avançado</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">IA &amp; Engenharia de Prompt</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Claude Code, Antigravity, VS Code, Agentes de IA</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Avançado</span>
+</div>
+
+</div>
+</div>
+
+<div class="mt-6 pt-4 border-t border-neutral-100 flex items-center justify-between text-[11px] text-neutral-400 font-geist-mono">
+<span>Domínio &amp; Aplicação Prática</span>
+<i class="w-4 h-4 text-emerald-500" data-lucide="check-circle-2"></i>
+</div>
+</div>
+
+<!-- Card 2: Logística & Supply Chain -->
+<div class="group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+<div>
+<div class="inline-flex gap-2 bg-purple-50 text-purple-600 px-3 py-1 rounded-full text-xs font-medium font-geist-mono mb-4 border border-purple-100">
+<i class="w-3.5 h-3.5" data-lucide="truck"></i> Logística &amp; Supply Chain
+</div>
+<h3 class="text-xl font-semibold text-neutral-900 mb-2">Cadeia de Suprimentos &amp; WMS</h3>
+<p class="text-neutral-500 text-xs leading-relaxed font-geist-mono mb-6">
+Expertise de 20 anos em gestão de processos, estoques e otimização logística.
+</p>
+
+<div class="space-y-3 border-t border-neutral-100 pt-4">
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Supply Chain Management</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Planejamento, Sourcing, Compras</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-purple-50 text-purple-700 font-geist-mono font-medium border border-purple-100">Especialista</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Gestão de Estoque &amp; WMS</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Inventários, Armazenagem, Acuracidade</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-purple-50 text-purple-700 font-geist-mono font-medium border border-purple-100">Especialista</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Roteirização e Frotas</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Monitoramento, Custos de Frete, Entregas</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Avançado</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Prevenção de Perdas &amp; Demanda</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Forecast, Controle de Quebras, KPIs</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Avançado</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Auditoria &amp; Inventários Cíclicos</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Conformidade e acuracidade contábil</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Avançado</span>
+</div>
+
+</div>
+</div>
+
+<div class="mt-6 pt-4 border-t border-neutral-100 flex items-center justify-between text-[11px] text-neutral-400 font-geist-mono">
+<span>Domínio &amp; Aplicação Prática</span>
+<i class="w-4 h-4 text-emerald-500" data-lucide="check-circle-2"></i>
+</div>
+</div>
+
+<!-- Card 3: Liderança & Gestão -->
+<div class="group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+<div>
+<div class="inline-flex gap-2 bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-xs font-medium font-geist-mono mb-4 border border-emerald-100">
+<i class="w-3.5 h-3.5" data-lucide="users"></i> Liderança &amp; Gestão
+</div>
+<h3 class="text-xl font-semibold text-neutral-900 mb-2">Coordenação &amp; Melhoria Contínua</h3>
+<p class="text-neutral-500 text-xs leading-relaxed font-geist-mono mb-6">
+Coordenação de equipes de alta performance, clima organizacional e cultura orientada a metas.
+</p>
+
+<div class="space-y-3 border-t border-neutral-100 pt-4">
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Liderança de Equipes</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Gestão de Pessoas, Treinamentos, Feedbacks</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 font-geist-mono font-medium border border-emerald-100">Avançado</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Mapeamento de Processos</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">BPMN, Padronização, Procedimentos (SOPs)</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Avançado</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Gestão por Indicadores (KPIs)</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">OKRs, SLAs, Auditoria Operacional</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Avançado</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Gestão de Mudanças &amp; Kaizen</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">5S, PDCA, Redução Contínua de Desperdícios</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Avançado</span>
+</div>
+
+<div class="flex items-center justify-between">
+<div>
+<div class="text-xs font-bold text-neutral-900">Comunicação Executiva</div>
+<div class="text-[11px] text-neutral-500 font-geist-mono">Apresentação de resultados para diretoria</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[10px] bg-neutral-100 text-neutral-700 font-geist-mono font-medium border border-neutral-200">Avançado</span>
+</div>
+
+</div>
+</div>
+
+<div class="mt-6 pt-4 border-t border-neutral-100 flex items-center justify-between text-[11px] text-neutral-400 font-geist-mono">
+<span>Domínio &amp; Aplicação Prática</span>
+<i class="w-4 h-4 text-emerald-500" data-lucide="check-circle-2"></i>
+</div>
+</div>
+
+</div>
+</div>
+</section>
+
+<!-- ========================================== -->
+<!-- 3) SEÇÃO: PROJETOS & DASHBOARDS            -->
+<!-- ========================================== -->
+<section class="sm:px-8 px-6 py-24 bg-white border-t border-neutral-200" id="projetos">
+<div class="max-w-6xl mx-auto">
+
+<div class="mb-12">
+<div class="flex items-center gap-3 mb-6">
+<span class="text-xs font-bold text-neutral-400 uppercase tracking-widest font-geist-mono">Portfólio em Ação</span>
+<div class="h-px flex-1 bg-neutral-200"></div>
+</div>
+<h2 class="text-3xl md:text-4xl font-semibold tracking-tight text-neutral-900 mb-4">Projetos &amp; Dashboards</h2>
+<p class="text-lg text-neutral-500 font-geist-mono max-w-2xl">Relatórios analíticos interativos, modelos de dados e automações desenvolvidas na prática.</p>
+</div>
+
+<!-- Category Tabs -->
+<div class="flex flex-wrap gap-2 mb-12">
+<button class="filter-btn px-4 py-2 rounded-full text-xs font-geist-mono font-medium transition-all bg-neutral-900 text-white cursor-pointer" onclick="filterProjects('all', this)">
+Todos os Projetos (11)
+</button>
+<button class="filter-btn px-4 py-2 rounded-full text-xs font-geist-mono font-medium transition-all bg-neutral-100 text-neutral-600 hover:bg-neutral-200 cursor-pointer" onclick="filterProjects('powerbi', this)">
+Power BI (6)
+</button>
+<button class="filter-btn px-4 py-2 rounded-full text-xs font-geist-mono font-medium transition-all bg-neutral-100 text-neutral-600 hover:bg-neutral-200 cursor-pointer" onclick="filterProjects('python', this)">
+Python &amp; SQL (5)
+</button>
+</div>
+
+<!-- 11 Projects Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" id="projects-grid">
+
+<!-- Project 1: Performance de Vendas -->
+<div class="project-card group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="powerbi">
+<div>
+<div class="h-48 rounded-xl overflow-hidden relative mb-5 border border-neutral-200 bg-neutral-100 group-hover:border-neutral-300 transition-all">
+<img src="assets/img03.png" alt="Performance de Vendas" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out" loading="lazy">
+<div class="absolute top-3 left-3">
+<span class="text-[10px] font-bold font-geist-mono px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-sm text-neutral-900 border border-neutral-200/80 shadow-sm">Power BI</span>
+</div>
+</div>
+
+<h3 class="text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">Performance de Vendas</h3>
+<p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">
+Análise aprofundada de desempenho comercial, comparativos anuais (YoY), evolução de faturamento e distribuição de receitas.
+</p>
+
+<div class="flex flex-wrap gap-1.5 mb-6">
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Power BI</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">DAX</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">YoY Growth</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Modelagem</span>
+</div>
+</div>
+
+<div class="pt-4 border-t border-neutral-100 flex items-center justify-between">
+<a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://app.powerbi.com/view?r=eyJrIjoiYzIxNGU1ZmQtNTIwZC00YTQ0LTliNGItZTRhZTExMjlkOGNjIiwidCI6ImY1MDM4NzBkLTBhYWUtNDI1Mi05ZjE1LWQ2MTg5NmY5ZjZmZiJ9" target="_blank" rel="noopener noreferrer">
+Acessar Relatório <i class="w-3.5 h-3.5" data-lucide="arrow-up-right"></i>
+</a>
+<span class="text-[11px] text-neutral-400 font-geist-mono">Power BI Service</span>
+</div>
+</div>
+
+<!-- Project 2: Infográfico de Vendas -->
+<div class="project-card group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="powerbi">
+<div>
+<div class="h-48 rounded-xl overflow-hidden relative mb-5 border border-neutral-200 bg-neutral-100 group-hover:border-neutral-300 transition-all">
+<img src="assets/infografico.png" alt="Infográfico de Vendas" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out" loading="lazy">
+<div class="absolute top-3 left-3">
+<span class="text-[10px] font-bold font-geist-mono px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-sm text-neutral-900 border border-neutral-200/80 shadow-sm">Power BI</span>
+</div>
+</div>
+
+<h3 class="text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">Infográfico de Vendas</h3>
+<p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">
+Dashboard interativo com design em formato de infográfico, acompanhando metas, ticket médio, margens e performance por canal.
+</p>
+
+<div class="flex flex-wrap gap-1.5 mb-6">
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Power BI</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Infográfico</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Storytelling</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">KPIs</span>
+</div>
+</div>
+
+<div class="pt-4 border-t border-neutral-100 flex items-center justify-between">
+<a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://app.powerbi.com/view?r=eyJrIjoiN2RkZjI3YjItZDE1NS00ZjNlLWJjMTAtZWE2YjA1N2VhZDNlIiwidCI6ImY1MDM4NzBkLTBhYWUtNDI1Mi05ZjE1LWQ2MTg5NmY5ZjZmZiJ9" target="_blank" rel="noopener noreferrer">
+Acessar Relatório <i class="w-3.5 h-3.5" data-lucide="arrow-up-right"></i>
+</a>
+<span class="text-[11px] text-neutral-400 font-geist-mono">Power BI Service</span>
+</div>
+</div>
+
+<!-- Project 3: HPN Heavy Power Nutrition -->
+<div class="project-card group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="powerbi">
+<div>
+<div class="h-48 rounded-xl overflow-hidden relative mb-5 border border-neutral-200 bg-neutral-100 group-hover:border-neutral-300 transition-all">
+<img src="assets/HPN.png" alt="HPN Heavy Power Nutrition" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out" loading="lazy">
+<div class="absolute top-3 left-3">
+<span class="text-[10px] font-bold font-geist-mono px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-sm text-neutral-900 border border-neutral-200/80 shadow-sm">Power BI</span>
+</div>
+</div>
+
+<h3 class="text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">HPN Heavy Power Nutrition</h3>
+<p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">
+Dashboard executivo voltado ao setor nutricional e esportivo, monitorando giro de estoque, rentabilidade de produtos e canais de venda.
+</p>
+
+<div class="flex flex-wrap gap-1.5 mb-6">
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Power BI</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Supply Chain</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Giro de Estoque</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Rentabilidade</span>
+</div>
+</div>
+
+<div class="pt-4 border-t border-neutral-100 flex items-center justify-between">
+<a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://app.powerbi.com/view?r=eyJrIjoiZGMzYTQ0MzktOGYyOS00YWU4LTlkMDYtYTUyYmNjZmFlZmZmIiwidCI6ImY1MDM4NzBkLTBhYWUtNDI1Mi05ZjE1LWQ2MTg5NmY5ZjZmZiJ9" target="_blank" rel="noopener noreferrer">
+Acessar Relatório <i class="w-3.5 h-3.5" data-lucide="arrow-up-right"></i>
+</a>
+<span class="text-[11px] text-neutral-400 font-geist-mono">Power BI Service</span>
+</div>
+</div>
+
+<!-- Project 4: Análise da Fila de Transplante de Rins -->
+<div class="project-card group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="powerbi">
+<div>
+<div class="h-48 rounded-xl overflow-hidden relative mb-5 border border-neutral-200 bg-neutral-100 group-hover:border-neutral-300 transition-all">
+<img src="assets/img04.png" alt="Transplante de Rins no Brasil" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out" loading="lazy">
+<div class="absolute top-3 left-3">
+<span class="text-[10px] font-bold font-geist-mono px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-sm text-neutral-900 border border-neutral-200/80 shadow-sm">Power BI</span>
+</div>
+</div>
+
+<h3 class="text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">Transplante de Rins no Brasil (2000-2017)</h3>
+<p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">
+Análise longitudinal da fila de espera e procedimentos de transplante renal ao longo de 17 anos com dados abertos de saúde pública.
+</p>
+
+<div class="flex flex-wrap gap-1.5 mb-6">
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Power BI</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Saúde Pública</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Séries Temporais</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Demografia</span>
+</div>
+</div>
+
+<div class="pt-4 border-t border-neutral-100 flex items-center justify-between">
+<a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://app.powerbi.com/view?r=eyJrIjoiNzQyZDVjMzgtODNiYy00M2VkLTgyNWQtYjc4NmI3ZGM1OTQxIiwidCI6ImY1MDM4NzBkLTBhYWUtNDI1Mi05ZjE1LWQ2MTg5NmY5ZjZmZiJ9" target="_blank" rel="noopener noreferrer">
+Acessar Relatório <i class="w-3.5 h-3.5" data-lucide="arrow-up-right"></i>
+</a>
+<span class="text-[11px] text-neutral-400 font-geist-mono">Power BI Service</span>
+</div>
+</div>
+
+<!-- Project 5: Análise ENEM 2019 -->
+<div class="project-card group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="powerbi">
+<div>
+<div class="h-48 rounded-xl overflow-hidden relative mb-5 border border-neutral-200 bg-neutral-100 group-hover:border-neutral-300 transition-all">
+<img src="assets/Enem2019-01.png" alt="Análise ENEM 2019" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out" loading="lazy">
+<div class="absolute top-3 left-3">
+<span class="text-[10px] font-bold font-geist-mono px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-sm text-neutral-900 border border-neutral-200/80 shadow-sm">Power BI</span>
+</div>
+</div>
+
+<h3 class="text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">Análise Educacional ENEM 2019</h3>
+<p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">
+Tratamento e análise de grandes volumes de microdados do ENEM, cruzando fatores socioeconômicos e notas de desempenho por disciplina.
+</p>
+
+<div class="flex flex-wrap gap-1.5 mb-6">
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Power BI</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Power Query</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Big Data</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Educação</span>
+</div>
+</div>
+
+<div class="pt-4 border-t border-neutral-100 flex items-center justify-between">
+<a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://app.powerbi.com/view?r=eyJrIjoiNDEyNjllYjMtMDI4Ni00OGFkLWE2NTgtZTAzZTJmMzE4YzkzIiwidCI6ImY1MDM4NzBkLTBhYWUtNDI1Mi05ZjE1LWQ2MTg5NmY5ZjZmZiJ9" target="_blank" rel="noopener noreferrer">
+Acessar Relatório <i class="w-3.5 h-3.5" data-lucide="arrow-up-right"></i>
+</a>
+<span class="text-[11px] text-neutral-400 font-geist-mono">Power BI Service</span>
+</div>
+</div>
+
+<!-- Project 6: Análise Comercial -->
+<div class="project-card group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="powerbi">
+<div>
+<div class="h-48 rounded-xl overflow-hidden relative mb-5 border border-neutral-200 bg-neutral-100 group-hover:border-neutral-300 transition-all">
+<img src="assets/img05.png" alt="Análise Comercial" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out" loading="lazy">
+<div class="absolute top-3 left-3">
+<span class="text-[10px] font-bold font-geist-mono px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-sm text-neutral-900 border border-neutral-200/80 shadow-sm">Power BI</span>
+</div>
+</div>
+
+<h3 class="text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">Análise Comercial</h3>
+<p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">
+Painel gerencial de dados de vendas, faturamento por região, ticket médio e monitoramento de metas comerciais em tempo real.
+</p>
+
+<div class="flex flex-wrap gap-1.5 mb-6">
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Power BI</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Vendas</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Segmentação</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Metas</span>
+</div>
+</div>
+
+<div class="pt-4 border-t border-neutral-100 flex items-center justify-between">
+<a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://app.powerbi.com/view?r=eyJrIjoiODhkYTY1ODAtM2QzYy00YzNmLTkxYTAtNjdiMmE1NWJmYzk3IiwidCI6ImY1MDM4NzBkLTBhYWUtNDI1Mi05ZjE1LWQ2MTg5NmY5ZjZmZiJ9" target="_blank" rel="noopener noreferrer">
+Acessar Relatório <i class="w-3.5 h-3.5" data-lucide="arrow-up-right"></i>
+</a>
+<span class="text-[11px] text-neutral-400 font-geist-mono">Power BI Service</span>
+</div>
+</div>
+
+<!-- Project 7: Engajamento Instagram -->
+<div class="project-card group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="python">
+<div>
+<div class="h-48 rounded-xl overflow-hidden relative mb-5 border border-neutral-200 bg-neutral-100 group-hover:border-neutral-300 transition-all">
+<img src="assets/06.jpg" alt="Engajamento Instagram" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out" loading="lazy">
+<div class="absolute top-3 left-3">
+<span class="text-[10px] font-bold font-geist-mono px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-sm text-neutral-900 border border-neutral-200/80 shadow-sm">Python</span>
+</div>
+</div>
+
+<h3 class="text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">Engajamento Instagram</h3>
+<p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">
+Análise estatística e correlação de métricas de redes sociais, identificando horários de pico e fatores determinantes de engajamento.
+</p>
+
+<div class="flex flex-wrap gap-1.5 mb-6">
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Python</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Pandas</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Seaborn</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Analytics</span>
+</div>
+</div>
+
+<div class="pt-4 border-t border-neutral-100 flex items-center justify-between">
+<a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://github.com/rafa10bjj/Engajamento-Instagram" target="_blank" rel="noopener noreferrer">
+Ver no GitHub <i class="w-3.5 h-3.5" data-lucide="github"></i>
+</a>
+<span class="text-[11px] text-neutral-400 font-geist-mono">Código Aberto</span>
+</div>
+</div>
+
+<!-- Project 8: Análise Lojas Seu João -->
+<div class="project-card group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="python">
+<div>
+<div class="h-48 rounded-xl overflow-hidden relative mb-5 border border-neutral-200 bg-neutral-100 group-hover:border-neutral-300 transition-all">
+<img src="assets/rafael.onefre_a_computer_screen_showing_a_steady_increasing_g_a36c4cf4-d8b4-456f-8cd7-82c0944c7359_1.png" alt="Análise Lojas Seu João" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out" loading="lazy">
+<div class="absolute top-3 left-3">
+<span class="text-[10px] font-bold font-geist-mono px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-sm text-neutral-900 border border-neutral-200/80 shadow-sm">Python</span>
+</div>
+</div>
+
+<h3 class="text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">Análise Lojas Seu João (Varejo)</h3>
+<p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">
+Análise exploratória de dados (EDA) para rede varejista (Desafio Alura Store), mapeando faturamento, sazonalidade e perfil de compras.
+</p>
+
+<div class="flex flex-wrap gap-1.5 mb-6">
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Python</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Jupyter</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">EDA</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Varejo</span>
+</div>
+</div>
+
+<div class="pt-4 border-t border-neutral-100 flex items-center justify-between">
+<a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://github.com/rafa10bjj/Desafio_Alura_Store" target="_blank" rel="noopener noreferrer">
+Ver no GitHub <i class="w-3.5 h-3.5" data-lucide="github"></i>
+</a>
+<span class="text-[11px] text-neutral-400 font-geist-mono">Jupyter Notebook</span>
+</div>
+</div>
+
+<!-- Project 9: x-Telecom -->
+<div class="project-card group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="python">
+<div>
+<div class="h-48 rounded-xl overflow-hidden relative mb-5 border border-neutral-200 bg-neutral-100 group-hover:border-neutral-300 transition-all">
+<img src="assets/Captura%20de%20tela%202025-06-10%20171548.png" alt="x-Telecom Churn" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out" loading="lazy">
+<div class="absolute top-3 left-3">
+<span class="text-[10px] font-bold font-geist-mono px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-sm text-neutral-900 border border-neutral-200/80 shadow-sm">Python</span>
+</div>
+</div>
+
+<h3 class="text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">x-Telecom: Previsão de Churn</h3>
+<p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">
+Análise de evasão de clientes em telecomunicações, diagnosticando motivos de cancelamento e aplicando modelos preditivos de retenção.
+</p>
+
+<div class="flex flex-wrap gap-1.5 mb-6">
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Python</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Machine Learning</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Pandas</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Retenção</span>
+</div>
+</div>
+
+<div class="pt-4 border-t border-neutral-100 flex items-center justify-between">
+<a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://github.com/rafa10bjj/Telecom-X" target="_blank" rel="noopener noreferrer">
+Ver no GitHub <i class="w-3.5 h-3.5" data-lucide="github"></i>
+</a>
+<span class="text-[11px] text-neutral-400 font-geist-mono">EDA &amp; Modelo</span>
+</div>
+</div>
+
+<!-- Project 10: Análise de Dados Python -->
+<div class="project-card group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="python">
+<div>
+<div class="h-48 rounded-xl overflow-hidden relative mb-5 border border-neutral-200 bg-neutral-100 group-hover:border-neutral-300 transition-all">
+<img src="assets/06.jpg" alt="Análise de Dados Python" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out" loading="lazy">
+<div class="absolute top-3 left-3">
+<span class="text-[10px] font-bold font-geist-mono px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-sm text-neutral-900 border border-neutral-200/80 shadow-sm">Python</span>
+</div>
+</div>
+
+<h3 class="text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">Análise de Dados com Python</h3>
+<p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">
+Repositório central com scripts de automação, manipulação de bases relacionais, pipelines de ETL e geração de gráficos estatísticos.
+</p>
+
+<div class="flex flex-wrap gap-1.5 mb-6">
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Python</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Pandas</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Numpy</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">ETL</span>
+</div>
+</div>
+
+<div class="pt-4 border-t border-neutral-100 flex items-center justify-between">
+<a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://github.com/rafa10bjj/Python_an-lise_de_dados" target="_blank" rel="noopener noreferrer">
+Ver no GitHub <i class="w-3.5 h-3.5" data-lucide="github"></i>
+</a>
+<span class="text-[11px] text-neutral-400 font-geist-mono">Repositório</span>
+</div>
+</div>
+
+<!-- Project 11: Previsão de Inadimplência com SQL + Python -->
+<div class="project-card group bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="python">
+<div>
+<div class="h-48 rounded-xl overflow-hidden relative mb-5 border border-neutral-200 bg-neutral-100 group-hover:border-neutral-300 transition-all">
+<img src="assets/img06.png" alt="Previsão de Inadimplência SQL + Python" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out" loading="lazy">
+<div class="absolute top-3 left-3">
+<span class="text-[10px] font-bold font-geist-mono px-2.5 py-1 rounded-md bg-white/95 backdrop-blur-sm text-neutral-900 border border-neutral-200/80 shadow-sm">SQL + Python</span>
+</div>
+</div>
+
+<h3 class="text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">Previsão de Inadimplência</h3>
+<p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">
+Modelo preditivo de crédito integrando consultas avançadas em SQL e algoritmos de machine learning em Python para antecipação de inadimplência.
+</p>
+
+<div class="flex flex-wrap gap-1.5 mb-6">
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">SQL</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Python</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Machine Learning</span>
+<span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Risco de Crédito</span>
+</div>
+</div>
+
+<div class="pt-4 border-t border-neutral-100 flex items-center justify-between">
+<a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://github.com/rafa10bjj/PROJETO-PARA-PREVER-INADIMPLENCIA/tree/main" target="_blank" rel="noopener noreferrer">
+Ver no GitHub <i class="w-3.5 h-3.5" data-lucide="github"></i>
+</a>
+<span class="text-[11px] text-neutral-400 font-geist-mono">Repositório</span>
+</div>
+</div>
+
+</div>
+
+</div>
+</section>
+
+<!-- ========================================== -->
+<!-- 4) SEÇÃO: EXPERIÊNCIA PROFISSIONAL         -->
+<!-- ========================================== -->
+<section class="sm:px-8 px-6 py-24 bg-neutral-50 border-t border-neutral-200" id="experiencia">
+<div class="max-w-4xl mx-auto">
+
+<div class="mb-16 text-center">
+<div class="inline-flex items-center gap-2 mb-4">
+<span class="text-xs font-bold text-neutral-400 uppercase tracking-widest font-geist-mono">Trajetória</span>
+</div>
+<h2 class="text-3xl md:text-4xl font-semibold tracking-tight text-neutral-900 mb-4">Experiência Profissional</h2>
+<p class="text-lg text-neutral-500 font-geist-mono max-w-2xl mx-auto">20 anos de experiência prática, unindo liderança de operações e inteligência analítica.</p>
+</div>
+
+<!-- Timeline Container -->
+<div class="relative border-l border-neutral-200 ml-4 sm:ml-32 space-y-12">
+
+<!-- Item 1: Atual -->
+<div class="relative pl-8 sm:pl-10">
+<!-- Indicator dot -->
+<div class="absolute -left-3 top-1.5 w-6 h-6 rounded-full bg-white border-2 border-neutral-900 flex items-center justify-center shadow-sm">
+<div class="w-2 h-2 rounded-full bg-neutral-900"></div>
+</div>
+<!-- Left time tag for desktop -->
+<div class="sm:absolute sm:-left-36 sm:top-1 sm:text-right sm:w-28 mb-2 sm:mb-0">
+<span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-neutral-900 text-white font-geist-mono">Atual</span>
+<div class="text-xs text-neutral-500 font-geist-mono mt-0.5">1 ano+</div>
+</div>
+
+<div class="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 shadow-sm hover:shadow-xl hover:border-neutral-300 transition-all duration-300">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-4 border-b border-neutral-100">
+<div>
+<h3 class="text-xl font-bold text-neutral-900">Analista de Prevenção e Demanda</h3>
+<div class="text-sm font-semibold text-neutral-600 font-geist-mono">Kiosk Brands</div>
+</div>
+<div class="text-xs text-neutral-500 font-geist-mono sm:text-right">
+<div>janeiro 2026 – Atual</div>
+<div class="text-neutral-400">Recife, PE</div>
+</div>
+</div>
+
+<p class="text-xs sm:text-sm text-neutral-600 font-geist-mono mb-4 leading-relaxed">
+Atuação estratégica com inteligência de dados, prevenção de perdas e automação de rotinas de supply chain:
+</p>
+
+<ul class="text-xs sm:text-sm text-neutral-600 font-geist-mono space-y-2.5">
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Desenvolvimento de dashboards dinâmicos em Power BI para monitoramento de KPIs e performance de fornecedores;</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Automação de rotinas de cotação e tratamento de bases de dados utilizando scripts em Python;</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Gestão do ciclo de compras com foco em insumos críticos e mitigação de rupturas;</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Análise de dados operacionais para identificação contínua de oportunidades de redução de custos.</span>
+</li>
+</ul>
+</div>
+</div>
+
+<!-- Item 2: 3 anos -->
+<div class="relative pl-8 sm:pl-10">
+<!-- Indicator dot -->
+<div class="absolute -left-3 top-1.5 w-6 h-6 rounded-full bg-white border-2 border-neutral-400 flex items-center justify-center shadow-sm">
+<div class="w-2 h-2 rounded-full bg-neutral-400"></div>
+</div>
+<!-- Left time tag for desktop -->
+<div class="sm:absolute sm:-left-36 sm:top-1 sm:text-right sm:w-28 mb-2 sm:mb-0">
+<span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-neutral-100 text-neutral-700 border border-neutral-200 font-geist-mono">3 anos</span>
+<div class="text-xs text-neutral-500 font-geist-mono mt-0.5">2022 – 2025</div>
+</div>
+
+<div class="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 shadow-sm hover:shadow-xl hover:border-neutral-300 transition-all duration-300">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-4 border-b border-neutral-100">
+<div>
+<h3 class="text-xl font-bold text-neutral-900">Encarregado de Logística</h3>
+<div class="text-sm font-semibold text-neutral-600 font-geist-mono">Fattu do Brasil</div>
+</div>
+<div class="text-xs text-neutral-500 font-geist-mono sm:text-right">
+<div>Agosto 2022 – Novembro 2025</div>
+<div class="text-neutral-400">Recife, PE</div>
+</div>
+</div>
+
+<p class="text-xs sm:text-sm text-neutral-600 font-geist-mono mb-4 leading-relaxed">
+Liderança de operações logísticas, gestão de armazenagem, acuracidade de inventário e distribuição:
+</p>
+
+<ul class="text-xs sm:text-sm text-neutral-600 font-geist-mono space-y-2.5">
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Análise de dados dos processos logísticos com geração de relatórios gerenciais e dashboards de produtividade;</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Otimização da liberação de veículos e roteirização através de análise diária de volumetria e rotas;</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Padronização e melhoria contínua no processo de inventários cíclicos e gerais;</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Gestão direta de pessoas, controle de jornada e clima organizacional de equipe operacional.</span>
+</li>
+</ul>
+</div>
+</div>
+
+<!-- Item 3: 10 anos -->
+<div class="relative pl-8 sm:pl-10">
+<!-- Indicator dot -->
+<div class="absolute -left-3 top-1.5 w-6 h-6 rounded-full bg-white border-2 border-neutral-400 flex items-center justify-center shadow-sm">
+<div class="w-2 h-2 rounded-full bg-neutral-400"></div>
+</div>
+<!-- Left time tag for desktop -->
+<div class="sm:absolute sm:-left-36 sm:top-1 sm:text-right sm:w-28 mb-2 sm:mb-0">
+<span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-neutral-100 text-neutral-700 border border-neutral-200 font-geist-mono">10 anos</span>
+<div class="text-xs text-neutral-500 font-geist-mono mt-0.5">2009 – 2019</div>
+</div>
+
+<div class="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 shadow-sm hover:shadow-xl hover:border-neutral-300 transition-all duration-300">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-4 border-b border-neutral-100">
+<div>
+<h3 class="text-xl font-bold text-neutral-900">Encarregado Geral de Operações</h3>
+<div class="text-sm font-semibold text-neutral-600 font-geist-mono">Focus Distribuidora Ltda</div>
+</div>
+<div class="text-xs text-neutral-500 font-geist-mono sm:text-right">
+<div>Agosto 2009 – Maio 2019</div>
+<div class="text-neutral-400">Recife, PE</div>
+</div>
+</div>
+
+<p class="text-xs sm:text-sm text-neutral-600 font-geist-mono mb-4 leading-relaxed">
+Gestão completa da operação do centro de distribuição, processos de armazenagem, WMS e fiscal:
+</p>
+
+<ul class="text-xs sm:text-sm text-neutral-600 font-geist-mono space-y-2.5">
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Liderança de equipe operacional por quase uma década garantindo SLAs de entrega e acuracidade;</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Implementação e consolidação de rotinas com sistema WMS para recebimento, endereçamento e expedição;</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Elaboração de relatórios analíticos de estoque para a diretoria comercial e financeira;</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-neutral-400">•</span>
+<span>Treinamento, capacitação técnica e desenvolvimento contínuo de colaboradores.</span>
+</li>
+</ul>
+</div>
+</div>
+
+</div>
+</div>
+</section>
+
+<!-- ========================================== -->
+<!-- 5) SEÇÃO: FORMAÇÃO & CERTIFICAÇÕES         -->
+<!-- ========================================== -->
+<section class="sm:px-8 px-6 py-24 bg-white border-t border-neutral-200" id="formacao">
+<div class="max-w-6xl mx-auto">
+
+<div class="mb-16">
+<div class="flex items-center gap-3 mb-6">
+<span class="text-xs font-bold text-neutral-400 uppercase tracking-widest font-geist-mono">Qualificações</span>
+<div class="h-px flex-1 bg-neutral-200"></div>
+</div>
+<h2 class="text-3xl md:text-4xl font-semibold tracking-tight text-neutral-900 mb-4">Formação &amp; Certificações</h2>
+<p class="text-lg text-neutral-500 font-geist-mono max-w-2xl">Educação formal continuada com foco em tecnologia da informação e especialização analítica.</p>
+</div>
+
+<!-- 5 Qualification Cards Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+<!-- 1. ADS -->
+<div class="bg-neutral-50 border border-neutral-200 rounded-2xl p-6 hover:shadow-md transition">
+<div class="flex items-center justify-between mb-4">
+<span class="text-[10px] font-bold text-neutral-500 font-geist-mono uppercase tracking-wider">Graduação Tecnológica</span>
+<span class="px-2 py-0.5 rounded text-[10px] bg-amber-50 text-amber-700 font-geist-mono border border-amber-200">Em andamento</span>
+</div>
+<h3 class="text-lg font-bold text-neutral-900 mb-1">Análise e Desenvolvimento de Sistemas</h3>
+<div class="text-xs text-neutral-600 font-geist-mono mb-4">Unifatecie</div>
+<div class="text-[11px] text-neutral-400 font-geist-mono pt-4 border-t border-neutral-200">
+Período: Dezembro/2023 – Em andamento
+</div>
+</div>
+
+<!-- 2. Python Impressionador -->
+<div class="bg-neutral-50 border border-neutral-200 rounded-2xl p-6 hover:shadow-md transition">
+<div class="flex items-center justify-between mb-4">
+<span class="text-[10px] font-bold text-neutral-500 font-geist-mono uppercase tracking-wider">Especialização Prática</span>
+<span class="px-2 py-0.5 rounded text-[10px] bg-amber-50 text-amber-700 font-geist-mono border border-amber-200">Em andamento</span>
+</div>
+<h3 class="text-lg font-bold text-neutral-900 mb-1">Python Impressionador</h3>
+<div class="text-xs text-neutral-600 font-geist-mono mb-4">Hashtag Treinamentos</div>
+<div class="text-[11px] text-neutral-400 font-geist-mono pt-4 border-t border-neutral-200">
+Período: Janeiro/2024 – Em andamento
+</div>
+</div>
+
+<!-- 3. Formação em Análise de Dados -->
+<div class="bg-neutral-50 border border-neutral-200 rounded-2xl p-6 hover:shadow-md transition">
+<div class="flex items-center justify-between mb-4">
+<span class="text-[10px] font-bold text-neutral-500 font-geist-mono uppercase tracking-wider">Certificação Profissional</span>
+<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 font-geist-mono border border-emerald-200">Concluído</span>
+</div>
+<h3 class="text-lg font-bold text-neutral-900 mb-1">Formação em Análise de Dados</h3>
+<div class="text-xs text-neutral-600 font-geist-mono mb-4">Xperiun Data Analytics</div>
+<div class="text-[11px] text-neutral-400 font-geist-mono pt-4 border-t border-neutral-200">
+Período: Concluído
+</div>
+</div>
+
+<!-- 4. MBA Logística -->
+<div class="bg-neutral-50 border border-neutral-200 rounded-2xl p-6 hover:shadow-md transition">
+<div class="flex items-center justify-between mb-4">
+<span class="text-[10px] font-bold text-neutral-500 font-geist-mono uppercase tracking-wider">Pós-Graduação Lato Sensu</span>
+<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 font-geist-mono border border-emerald-200">Concluído</span>
+</div>
+<h3 class="text-lg font-bold text-neutral-900 mb-1">MBA em Logística Empresarial</h3>
+<div class="text-xs text-neutral-600 font-geist-mono mb-4">Estácio</div>
+<div class="text-[11px] text-neutral-400 font-geist-mono pt-4 border-t border-neutral-200">
+Período: Março/2023 – Março/2024
+</div>
+</div>
+
+<!-- 5. Gestão Cadeia de Suprimentos -->
+<div class="bg-neutral-50 border border-neutral-200 rounded-2xl p-6 hover:shadow-md transition">
+<div class="flex items-center justify-between mb-4">
+<span class="text-[10px] font-bold text-neutral-500 font-geist-mono uppercase tracking-wider">Graduação</span>
+<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 font-geist-mono border border-emerald-200">Concluído</span>
+</div>
+<h3 class="text-lg font-bold text-neutral-900 mb-1">Gestão da Cadeia de Suprimentos</h3>
+<div class="text-xs text-neutral-600 font-geist-mono mb-4">UNIP</div>
+<div class="text-[11px] text-neutral-400 font-geist-mono pt-4 border-t border-neutral-200">
+Período: Janeiro/2021 – Dezembro/2023
+</div>
+</div>
+
+</div>
+</div>
+</section>
+
+<!-- ========================================== -->
+<!-- 6) SEÇÃO: ENTRE EM CONTATO                 -->
+<!-- ========================================== -->
+<section class="sm:px-8 px-6 py-24 bg-neutral-50 border-t border-neutral-200" id="contato">
+<div class="max-w-6xl mx-auto">
+
+<div class="mb-16">
+<div class="flex items-center gap-3 mb-6">
+<span class="text-xs font-bold text-neutral-400 uppercase tracking-widest font-geist-mono">Vamos Conversar</span>
+<div class="h-px flex-1 bg-neutral-200"></div>
+</div>
+<h2 class="text-3xl md:text-4xl font-semibold tracking-tight text-neutral-900 mb-4">Entre em Contato</h2>
+<p class="text-lg text-neutral-500 font-geist-mono max-w-2xl">Aberto para novas oportunidades em Análise de Dados, BI, consultorias e networking profissional.</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+
+<!-- Left: Direct Channels -->
+<div class="lg:col-span-5 space-y-4">
+
+<!-- WhatsApp Direct -->
+<a class="block p-5 bg-white rounded-2xl border border-neutral-200 hover:border-neutral-400 hover:shadow-md transition" href="https://wa.me/5581995046827" target="_blank">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+<i class="w-5 h-5" data-lucide="message-circle"></i>
+</div>
+<div>
+<div class="text-xs font-medium text-neutral-500 font-geist-mono">WhatsApp Direto</div>
+<div class="text-sm font-bold text-neutral-900 font-geist-mono">(81) 99504-6827</div>
+</div>
+</div>
+<i class="w-4 h-4 text-neutral-400" data-lucide="arrow-up-right"></i>
+</div>
+</a>
+
+<!-- Email -->
+<a class="block p-5 bg-white rounded-2xl border border-neutral-200 hover:border-neutral-400 hover:shadow-md transition" href="mailto:rafa10k@hotmail.com">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+<i class="w-5 h-5" data-lucide="mail"></i>
+</div>
+<div>
+<div class="text-xs font-medium text-neutral-500 font-geist-mono">E-mail Profissional</div>
+<div class="text-sm font-bold text-neutral-900 font-geist-mono">rafa10k@hotmail.com</div>
+</div>
+</div>
+<i class="w-4 h-4 text-neutral-400" data-lucide="arrow-up-right"></i>
+</div>
+</a>
+
+<!-- LinkedIn -->
+<a class="block p-5 bg-white rounded-2xl border border-neutral-200 hover:border-neutral-400 hover:shadow-md transition" href="https://linkedin.com/in/rafael-silva-160274b0" target="_blank">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-neutral-100 text-neutral-900 flex items-center justify-center border border-neutral-200">
+<i class="w-5 h-5" data-lucide="linkedin"></i>
+</div>
+<div>
+<div class="text-xs font-medium text-neutral-500 font-geist-mono">LinkedIn</div>
+<div class="text-sm font-bold text-neutral-900 font-geist-mono">/in/rafael-silva-160274b0</div>
+</div>
+</div>
+<i class="w-4 h-4 text-neutral-400" data-lucide="arrow-up-right"></i>
+</div>
+</a>
+
+<!-- GitHub -->
+<a class="block p-5 bg-white rounded-2xl border border-neutral-200 hover:border-neutral-400 hover:shadow-md transition" href="https://github.com/rafa10bjj" target="_blank">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-neutral-100 text-neutral-900 flex items-center justify-center border border-neutral-200">
+<i class="w-5 h-5" data-lucide="github"></i>
+</div>
+<div>
+<div class="text-xs font-medium text-neutral-500 font-geist-mono">GitHub Repositórios</div>
+<div class="text-sm font-bold text-neutral-900 font-geist-mono">github.com/rafa10bjj</div>
+</div>
+</div>
+<i class="w-4 h-4 text-neutral-400" data-lucide="arrow-up-right"></i>
+</div>
+</a>
+
+<!-- Location Card -->
+<div class="p-5 bg-white rounded-2xl border border-neutral-200">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-neutral-100 text-neutral-700 flex items-center justify-center border border-neutral-200">
+<i class="w-5 h-5" data-lucide="map-pin"></i>
+</div>
+<div>
+<div class="text-xs font-medium text-neutral-500 font-geist-mono">Localização</div>
+<div class="text-sm font-bold text-neutral-900 font-geist-mono">Recife, Pernambuco – Brasil</div>
+</div>
+</div>
+</div>
+
+</div>
+
+<!-- Right: Interactive WhatsApp Form -->
+<div class="lg:col-span-7 bg-white rounded-2xl border border-neutral-200 p-8 sm:p-10 shadow-sm">
+<h3 class="text-xl font-bold text-neutral-900 mb-2">Envie uma Mensagem Rápida</h3>
+<p class="text-xs text-neutral-500 font-geist-mono mb-8">
+Preencha os campos abaixo para iniciar uma conversa diretamente pelo WhatsApp.
+</p>
+
+<form class="space-y-6" id="whatsapp-form" onsubmit="sendWhatsApp(event)">
+<div>
+<label class="block text-xs font-bold uppercase tracking-wider text-neutral-700 font-geist-mono mb-2" for="nome">
+Seu Nome
+</label>
+<input class="w-full px-4 py-3 rounded-lg border border-neutral-200 focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 outline-none text-sm font-geist-mono transition bg-neutral-50 focus:bg-white" id="nome" placeholder="Ex: Carlos Silva" required="" type="text"/>
+</div>
+
+<div>
+<label class="block text-xs font-bold uppercase tracking-wider text-neutral-700 font-geist-mono mb-2" for="empresa">
+Seu E-mail / Empresa
+</label>
+<input class="w-full px-4 py-3 rounded-lg border border-neutral-200 focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 outline-none text-sm font-geist-mono transition bg-neutral-50 focus:bg-white" id="empresa" placeholder="Ex: carlos@empresa.com" required="" type="text"/>
+</div>
+
+<div>
+<label class="block text-xs font-bold uppercase tracking-wider text-neutral-700 font-geist-mono mb-2" for="mensagem">
+Mensagem ou Proposta
+</label>
+<textarea class="w-full px-4 py-3 rounded-lg border border-neutral-200 focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 outline-none text-sm font-geist-mono transition bg-neutral-50 focus:bg-white resize-none" id="mensagem" placeholder="Olá Rafael, gostaria de conversar sobre uma oportunidade de análise de dados / consultoria..." required="" rows="4"></textarea>
+</div>
+
+<button class="w-full py-4 rounded-lg bg-neutral-900 text-white font-medium hover:bg-neutral-800 transition-colors font-geist-mono text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md" type="submit">
+<i class="w-4 h-4" data-lucide="send"></i> Enviar Mensagem via WhatsApp
+</button>
+</form>
+</div>
+
+</div>
+
+</div>
+</section>
+
+<!-- ========================================== -->
+<!-- FOOTER                                     -->
+<!-- ========================================== -->
+<footer class="bg-white border-t border-neutral-200 px-6 sm:px-8">
+<div class="mx-auto max-w-6xl py-12 md:py-20">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-10 justify-between items-center">
+<div>
+<div class="font-bold text-lg tracking-tight mb-2">Rafael Rodrigues</div>
+<p class="text-neutral-500 text-xs font-geist-mono">Analista de Dados &amp; BI • Supply Chain &amp; Logística</p>
+<p class="text-neutral-400 text-[11px] font-geist-mono mt-1">© 2026. Todos os direitos reservados.</p>
+</div>
+<div class="flex flex-col md:flex-row gap-6 md:justify-end items-start md:items-center text-sm font-medium text-neutral-600">
+<div class="flex items-center gap-2 px-3 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 text-xs font-geist-mono">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+</span>
+Avalio Oportunidades
+</div>
+<nav class="flex gap-6 items-center">
+<a class="hover:text-black transition text-xs font-geist-mono" href="https://linkedin.com/in/rafael-silva-160274b0" target="_blank">LinkedIn</a>
+<a class="hover:text-black transition text-xs font-geist-mono" href="https://github.com/rafa10bjj" target="_blank">GitHub</a>
+<button class="hover:text-black transition text-xs font-geist-mono flex items-center gap-1 cursor-pointer" onclick="window.scrollTo({top:0, behavior:'smooth'})">
+Topo <i class="w-3.5 h-3.5" data-lucide="arrow-up"></i>
+</button>
+</nav>
+</div>
+</div>
+</div>
+</footer>
+
+</main>
+
+<!-- ========================================== -->
+<!-- SCRIPTS & INTERACTION LOGIC                -->
+<!-- ========================================== -->
+<script>
+// 1. Initialize Lucide Icons
+lucide.createIcons();
+
+// 2. Project Filter Logic
+function filterProjects(category, button) {
+    const buttons = document.querySelectorAll('.filter-btn');
+    buttons.forEach(btn => {
+        btn.classList.remove('bg-neutral-900', 'text-white');
+        btn.classList.add('bg-neutral-100', 'text-neutral-600');
+    });
+    button.classList.add('bg-neutral-900', 'text-white');
+    button.classList.remove('bg-neutral-100', 'text-neutral-600');
+
+    const cards = document.querySelectorAll('.project-card');
+    cards.forEach(card => {
+        if (category === 'all' || card.getAttribute('data-category') === category) {
+            card.style.display = 'flex';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+// 4. WhatsApp Direct Message Form Dispatch
+function sendWhatsApp(e) {
+    e.preventDefault();
+    const nome = document.getElementById('nome').value;
+    const empresa = document.getElementById('empresa').value;
+    const mensagem = document.getElementById('mensagem').value;
+
+    const texto = `Olá Rafael! Meu nome é ${nome} (${empresa}).\n\n${mensagem}`;
+    const url = `https://wa.me/5581995046827?text=${encodeURIComponent(texto)}`;
+    window.open(url, '_blank');
+}
+</script>
+<script data-img-fallback-handler="">!function(){var f=["https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/917d6f93-fb36-439a-8c48-884b67b35381_1600w.jpg","https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/4734259a-bad7-422f-981e-ce01e79184f2_1600w.jpg","https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/c543a9e1-f226-4ced-80b0-feb8445a75b9_1600w.jpg","https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/5bab247f-35d9-400d-a82b-fd87cfe913d2_1600w.webp","https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/30104e3c-5eea-4b93-93e9-5313698a7156_1600w.webp"],h=new Set;function g(s){for(var x=0,i=0;i<s.length;i++)x=(x<<5)-x+s.charCodeAt(i)|0;return f[Math.abs(x)%f.length]}function r(t){var s=t.src;if(s&&!h.has(s)){h.add(s);t.src=g(s)}}window.addEventListener("error",function(e){var t=e.target;if(t&&t.tagName==="IMG")r(t)},!0);function c(){document.querySelectorAll("img").forEach(function(i){if(i.complete&&!i.naturalWidth&&i.src)r(i)})}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",c);else c()}()</script>
+</body>
+</html>
