@@ -58,6 +58,38 @@ html {
     touch-action: manipulation;
   }
 }
+
+/* BlurText Animation (React Bits / Framer Motion Parity) */
+@keyframes blurTextTop {
+  0% {
+    filter: blur(14px);
+    opacity: 0;
+    transform: translateY(-50px);
+  }
+  50% {
+    filter: blur(5px);
+    opacity: 0.6;
+    transform: translateY(6px);
+  }
+  100% {
+    filter: blur(0px);
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.blur-word {
+  display: inline-block;
+  will-change: transform, filter, opacity;
+  opacity: 0;
+  filter: blur(14px);
+  transform: translateY(-50px);
+}
+
+.in-view .blur-word {
+  animation: blurTextTop 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: calc(var(--delay, 0s) + 0.3s);
+}
 </style>
 </head>
 <body class="bg-white text-neutral-900 antialiased selection:bg-neutral-200 selection:text-black min-h-screen flex flex-col">
@@ -65,35 +97,35 @@ html {
 <!-- ========================================== -->
 <!-- SIDE RAIL NAVIGATION (DESKTOP CAPSULE)     -->
 <!-- ========================================== -->
-<aside class="hidden lg:block fixed left-6 top-1/2 -translate-y-1/2 z-30">
-<div class="flex flex-col gap-2 bg-white/90 backdrop-blur border-neutral-200 border rounded-full p-2 shadow-xl items-center">
-<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="window.scrollTo({top: 0, behavior: 'smooth'})" role="button" title="Início">
-<i class="w-4 h-4" data-lucide="home"></i>
-<span class="absolute left-14 bg-neutral-900 text-white text-xs px-2.5 py-1 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Início</span>
+<aside class="hidden lg:block fixed left-3 xl:left-4 top-1/2 -translate-y-1/2 z-30 transition-all duration-300">
+<div class="flex flex-col gap-1.5 bg-white/95 backdrop-blur-md border border-neutral-200/90 rounded-full p-1.5 shadow-xl items-center">
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition-all relative text-neutral-400 w-8 h-8 rounded-full cursor-pointer" onclick="window.scrollTo({top: 0, behavior: 'smooth'})" role="button" title="Início">
+<i class="w-3.5 h-3.5" data-lucide="home"></i>
+<span class="absolute left-11 bg-neutral-900 text-white text-[11px] px-2 py-0.5 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Início</span>
 </button>
-<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('sobre').scrollIntoView({behavior: 'smooth'})" role="button" title="Sobre Mim">
-<i class="w-4 h-4" data-lucide="user"></i>
-<span class="absolute left-14 bg-neutral-900 text-white text-xs px-2.5 py-1 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Sobre Mim</span>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition-all relative text-neutral-400 w-8 h-8 rounded-full cursor-pointer" onclick="document.getElementById('sobre').scrollIntoView({behavior: 'smooth'})" role="button" title="Sobre Mim">
+<i class="w-3.5 h-3.5" data-lucide="user"></i>
+<span class="absolute left-11 bg-neutral-900 text-white text-[11px] px-2 py-0.5 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Sobre Mim</span>
 </button>
-<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('habilidades').scrollIntoView({behavior: 'smooth'})" role="button" title="Habilidades">
-<i class="w-4 h-4" data-lucide="layers"></i>
-<span class="absolute left-14 bg-neutral-900 text-white text-xs px-2.5 py-1 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Habilidades</span>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition-all relative text-neutral-400 w-8 h-8 rounded-full cursor-pointer" onclick="document.getElementById('habilidades').scrollIntoView({behavior: 'smooth'})" role="button" title="Habilidades">
+<i class="w-3.5 h-3.5" data-lucide="layers"></i>
+<span class="absolute left-11 bg-neutral-900 text-white text-[11px] px-2 py-0.5 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Habilidades</span>
 </button>
-<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('projetos').scrollIntoView({behavior: 'smooth'})" role="button" title="Dashboards & Projetos">
-<i class="w-4 h-4" data-lucide="bar-chart-2"></i>
-<span class="absolute left-14 bg-neutral-900 text-white text-xs px-2.5 py-1 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Dashboards &amp; Projetos</span>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition-all relative text-neutral-400 w-8 h-8 rounded-full cursor-pointer" onclick="document.getElementById('projetos').scrollIntoView({behavior: 'smooth'})" role="button" title="Dashboards & Projetos">
+<i class="w-3.5 h-3.5" data-lucide="bar-chart-2"></i>
+<span class="absolute left-11 bg-neutral-900 text-white text-[11px] px-2 py-0.5 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Dashboards &amp; Projetos</span>
 </button>
-<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('experiencia').scrollIntoView({behavior: 'smooth'})" role="button" title="Trajetória">
-<i class="w-4 h-4" data-lucide="briefcase"></i>
-<span class="absolute left-14 bg-neutral-900 text-white text-xs px-2.5 py-1 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Trajetória</span>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition-all relative text-neutral-400 w-8 h-8 rounded-full cursor-pointer" onclick="document.getElementById('experiencia').scrollIntoView({behavior: 'smooth'})" role="button" title="Trajetória">
+<i class="w-3.5 h-3.5" data-lucide="briefcase"></i>
+<span class="absolute left-11 bg-neutral-900 text-white text-[11px] px-2 py-0.5 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Trajetória</span>
 </button>
-<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('formacao').scrollIntoView({behavior: 'smooth'})" role="button" title="Formação">
-<i class="w-4 h-4" data-lucide="graduation-cap"></i>
-<span class="absolute left-14 bg-neutral-900 text-white text-xs px-2.5 py-1 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Formação</span>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition-all relative text-neutral-400 w-8 h-8 rounded-full cursor-pointer" onclick="document.getElementById('formacao').scrollIntoView({behavior: 'smooth'})" role="button" title="Formação">
+<i class="w-3.5 h-3.5" data-lucide="graduation-cap"></i>
+<span class="absolute left-11 bg-neutral-900 text-white text-[11px] px-2 py-0.5 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Formação</span>
 </button>
-<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition relative text-neutral-400 w-10 h-10 rounded-full cursor-pointer" onclick="document.getElementById('contato').scrollIntoView({behavior: 'smooth'})" role="button" title="Contato">
-<i class="w-4 h-4" data-lucide="mail"></i>
-<span class="absolute left-14 bg-neutral-900 text-white text-xs px-2.5 py-1 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Contato</span>
+<button class="group grid place-items-center hover:text-black hover:bg-neutral-100 transition-all relative text-neutral-400 w-8 h-8 rounded-full cursor-pointer" onclick="document.getElementById('contato').scrollIntoView({behavior: 'smooth'})" role="button" title="Contato">
+<i class="w-3.5 h-3.5" data-lucide="mail"></i>
+<span class="absolute left-11 bg-neutral-900 text-white text-[11px] px-2 py-0.5 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-geist-mono">Contato</span>
 </button>
 </div>
 </aside>
@@ -101,18 +133,18 @@ html {
 <!-- ========================================== -->
 <!-- HERO SECTION                               -->
 <!-- ========================================== -->
-<header class="relative w-full flex flex-col justify-between px-4 py-6 sm:px-8 sm:py-10 md:p-12 z-10 overflow-hidden bg-white" id="hero">
+<header class="relative w-full flex flex-col justify-between px-4 py-6 sm:px-8 sm:py-10 md:py-12 md:px-12 lg:px-20 xl:px-24 z-10 overflow-hidden bg-white" id="hero">
 <!-- Top Navigation Header -->
 <div class="flex justify-between items-center w-full max-w-[1400px] mx-auto z-10 mb-6 sm:mb-8">
   <div class="flex items-center gap-2 sm:gap-3">
     <span class="text-lg sm:text-xl font-bold tracking-tight text-black flex items-center gap-1">
       Rafael<span class="text-neutral-500 font-geist-mono text-sm sm:text-base font-normal">_Data</span>
     </span>
-    <span class="inline-block px-2 sm:px-2.5 py-0.5 rounded-full bg-neutral-100 text-[9px] sm:text-[10px] font-geist-mono text-neutral-600 border border-neutral-200 uppercase tracking-wide">
+    <span class="inline-block px-2 sm:px-2.5 py-0.5 rounded-full bg-neutral-100 text-[9px] sm:text-[10px] font-geist-mono text-neutral-600 border border-neutral-200 uppercase tracking-wide whitespace-nowrap shrink-0">
       BI &amp; Supply Chain
     </span>
   </div>
-  <nav class="hidden md:flex items-center gap-6 lg:gap-8 text-xs font-medium text-neutral-500 uppercase tracking-wide">
+  <nav class="hidden md:flex items-center gap-4 lg:gap-6 xl:gap-8 text-xs font-medium text-neutral-500 uppercase tracking-wide shrink-0">
     <a class="hover:text-black transition-colors" href="#hero">Início</a>
     <a class="hover:text-black transition-colors" href="#sobre">Sobre</a>
     <a class="hover:text-black transition-colors" href="#habilidades">Habilidades</a>
@@ -153,9 +185,17 @@ html {
       INTELIGÊNCIA DE DADOS &amp; SUPPLY CHAIN
     </div>
 
-    <h1 class="text-3xl xs:text-4xl sm:text-6xl lg:text-7xl font-semibold tracking-tighter leading-[1.05] sm:leading-[0.95] text-black">
-      Olá, eu sou <br/>
-      <span class="text-black">Rafael Rodrigues</span>
+    <h1 class="blur-text-container text-3xl xs:text-4xl sm:text-6xl lg:text-7xl font-semibold tracking-tighter leading-[1.05] sm:leading-[0.95] text-black">
+      <span class="inline-block">
+        <span class="blur-word" style="--delay: 0s;">Olá,&nbsp;</span><!--
+     --><span class="blur-word" style="--delay: 0.2s;">eu&nbsp;</span><!--
+     --><span class="blur-word" style="--delay: 0.4s;">sou</span>
+      </span>
+      <br/>
+      <span class="inline-block text-black">
+        <span class="blur-word text-black" style="--delay: 0.6s;">Rafael&nbsp;</span><!--
+     --><span class="blur-word text-black" style="--delay: 0.8s;">Rodrigues</span>
+      </span>
     </h1>
 
     <p class="text-base sm:text-xl text-neutral-800 font-medium tracking-tight">
@@ -240,7 +280,7 @@ html {
 <!-- ========================================== -->
 <!-- 1) SEÇÃO: SOBRE MIM                        -->
 <!-- ========================================== -->
-<section class="px-4 py-16 sm:px-8 sm:py-24 border-t border-neutral-100 bg-white" id="sobre">
+<section class="px-4 py-16 sm:px-8 sm:py-24 lg:px-20 xl:px-24 border-t border-neutral-100 bg-white" id="sobre">
 <div class="max-w-6xl mx-auto">
 
 <div class="mb-10 sm:mb-16">
@@ -356,7 +396,7 @@ html {
 <!-- ========================================== -->
 <!-- 2) SEÇÃO: HABILIDADES & COMPETÊNCIAS       -->
 <!-- ========================================== -->
-<section class="px-4 py-16 sm:px-8 sm:py-24 bg-neutral-50 border-t border-neutral-200" id="habilidades">
+<section class="px-4 py-16 sm:px-8 sm:py-24 lg:px-20 xl:px-24 bg-neutral-50 border-t border-neutral-200" id="habilidades">
 <div class="max-w-6xl mx-auto">
 
 <div class="mb-10 sm:mb-12">
@@ -572,7 +612,7 @@ html {
 <!-- ========================================== -->
 <!-- 3) SEÇÃO: PROJETOS & DASHBOARDS            -->
 <!-- ========================================== -->
-<section class="px-4 py-16 sm:px-8 sm:py-24 bg-white border-t border-neutral-200" id="projetos">
+<section class="px-4 py-16 sm:px-8 sm:py-24 lg:px-20 xl:px-24 bg-white border-t border-neutral-200" id="projetos">
 <div class="max-w-6xl mx-auto">
 
 <div class="mb-8 sm:mb-12">
@@ -916,7 +956,7 @@ html {
 <!-- ========================================== -->
 <!-- 4) SEÇÃO: EXPERIÊNCIA PROFISSIONAL         -->
 <!-- ========================================== -->
-<section class="px-4 py-16 sm:px-8 sm:py-24 bg-neutral-50 border-t border-neutral-200" id="experiencia">
+<section class="px-4 py-16 sm:px-8 sm:py-24 lg:px-20 xl:px-24 bg-neutral-50 border-t border-neutral-200" id="experiencia">
 <div class="max-w-4xl mx-auto">
 
 <div class="mb-12 sm:mb-16 text-center">
@@ -1080,7 +1120,7 @@ html {
 <!-- ========================================== -->
 <!-- 5) SEÇÃO: FORMAÇÃO & CERTIFICAÇÕES         -->
 <!-- ========================================== -->
-<section class="px-4 py-16 sm:px-8 sm:py-24 bg-white border-t border-neutral-200" id="formacao">
+<section class="px-4 py-16 sm:px-8 sm:py-24 lg:px-20 xl:px-24 bg-white border-t border-neutral-200" id="formacao">
 <div class="max-w-6xl mx-auto">
 
 <div class="mb-10 sm:mb-16">
@@ -1167,7 +1207,7 @@ html {
 <!-- ========================================== -->
 <!-- 6) SEÇÃO: ENTRE EM CONTATO                 -->
 <!-- ========================================== -->
-<section class="px-4 py-16 sm:px-8 sm:py-24 bg-neutral-50 border-t border-neutral-200" id="contato">
+<section class="px-4 py-16 sm:px-8 sm:py-24 lg:px-20 xl:px-24 bg-neutral-50 border-t border-neutral-200" id="contato">
 <div class="max-w-6xl mx-auto">
 
 <div class="mb-10 sm:mb-16">
@@ -1306,7 +1346,7 @@ html {
 <!-- ========================================== -->
 <!-- FOOTER                                     -->
 <!-- ========================================== -->
-<footer class="bg-white border-t border-neutral-200 px-4 py-8 sm:px-8 sm:py-16">
+<footer class="bg-white border-t border-neutral-200 px-4 py-8 sm:px-8 sm:py-16 lg:px-20 xl:px-24">
 <div class="mx-auto max-w-6xl">
   <div class="flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
     <div>
@@ -1376,6 +1416,46 @@ function sendWhatsApp(e) {
     const url = `https://wa.me/5581995046827?text=${encodeURIComponent(texto)}`;
     window.open(url, '_blank');
 }
+
+// 4. BlurText Trigger, Observer & Click-to-Replay
+(function initBlurText() {
+  const container = document.querySelector('.blur-text-container');
+  if (!container) return;
+
+  function replay() {
+    container.classList.remove('in-view');
+    container.querySelectorAll('.blur-word').forEach(w => w.style.filter = '');
+    void container.offsetWidth; // force reflow
+    container.classList.add('in-view');
+  }
+
+  // Remove blur filter once animation finishes for crystal clear text rendering
+  container.addEventListener('animationend', (e) => {
+    if (e.target.classList.contains('blur-word')) {
+      e.target.style.filter = 'none';
+    }
+  });
+
+  // Run on page load with IntersectionObserver
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver((entries, obs) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          replay();
+          obs.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px' });
+    observer.observe(container);
+  } else {
+    replay();
+  }
+
+  // Allow clicking on the title to replay the animation anytime
+  container.style.cursor = 'pointer';
+  container.setAttribute('title', 'Clique para ver a animação novamente');
+  container.addEventListener('click', replay);
+})();
 </script>
 </body>
 </html>
