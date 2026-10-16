@@ -116,7 +116,7 @@ Em poucos segundos, seu portfólio estará online no ar, com certificado SSL gra
 *Analista de Dados & BI • Supply Chain & Logística*  
 📍 Recife, Pernambuco – Brasil  
 
-- 💼 **LinkedIn:** [rafael-silva-160274b0](https://www.linkedin.com/in/rafael-silva-160274b0/)
+- 💼 **LinkedIn:** [rafael-rodrigues-silva-160274b0](https://www.linkedin.com/in/rafael-rodrigues-silva-160274b0/)
 - 🐙 **GitHub:** [@rafa10bjj](https://github.com/rafa10bjj)
 - 💬 **WhatsApp:** [(81) 99504-6827](https://wa.me/5581995046827)
 - ✉️ **E-mail:** [rafa10kl@hotmail.com](mailto:rafa10kl@hotmail.com)
