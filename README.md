@@ -6,7 +6,7 @@
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![SQL](https://img.shields.io/badge/SQL_Server-CC292B?style=for-the-badge&logo=microsoftsqlserver&logoColor=white)
 
-Portfólio profissional de **Rafael Rodrigues**, Analista de Dados & BI com mais de 20 anos de experiência prática conectando inteligência analítica, operações e cadeia de suprimentos (*Supply Chain*).
+Portfólio profissional de **Rafael Rodrigues**, Analista de Dados & BI com mais de 17 anos de experiência prática desde 2009, conectando inteligência analítica, operações e cadeia de suprimentos (*Supply Chain*).
 
 ---
 
@@ -42,7 +42,8 @@ PORTIFOLIO RAFAEL/
 ├── vercel.json       # Configurações de rotas, cache e segurança para a Vercel
 ├── .gitignore        # Arquivos e pastas ignorados no versionamento Git
 ├── README.md         # Documentação oficial do repositório
-└── assets/           # Imagens dos dashboards, fotos de perfil, fontes e ícones
+└── assets/           # JavaScript, imagens, fontes e ícones
+    ├── main.js       # Interações, filtros, animações e formulário de contato
     ├── img03.png
     ├── infografico.png
     ├── HPN.png

@@ -46,7 +46,7 @@ Utilize EXCLUSIVAMENTE os arquivos locais da pasta `assets/`:
   - Botões de Ação: `Explorar Dashboards` (Primário Sólido), `Conversar no WhatsApp` (Outline) e `LinkedIn ↗`.
   - Tags de Stack: `Power BI (DAX / M)`, `Python (Pandas)`, `SQL Server`, `Gestão Logística`.
   - Foto Hero: `assets/Gemini_Generated_Image_ (1).png` com tags flutuantes `Power BI Specialist` e `Data & Supply Chain`.
-  - Grid de Métricas: `20+` Anos em Logística & Operações | `15+` Dashboards & Relatórios | `10+` Projetos em Python & SQL | `5+` Especializações & Cursos.
+  - Grid de Métricas: `17+` Anos em Logística & Operações | `15+` Dashboards & Relatórios | `10+` Projetos em Python & SQL | `5+` Especializações & Cursos.
 - **Sobre Mim (Split 12-Colunas):**
   - Esquerda (`lg:col-span-5`): Card com a foto `assets/Gemini_Generated_Image_.png`, tag `PERFIL PROFISSIONAL`, `Recife, PE` e badges de graduação/MBA.
   - Direita (`lg:col-span-7`): Os 3 parágrafos da trajetória e o Grid 2x2 dos Pilares (*Visão Analítica*, *Automação*, *Liderança*, *Resolução de Problemas*).

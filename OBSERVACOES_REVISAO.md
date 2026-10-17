@@ -3,7 +3,7 @@
 A nova versão mantém o layout, os estilos, as imagens, os links dos projetos e as animações do original.
 
 - Informar resultados reais por empresa: indicador, situação anterior, situação posterior, período e contribuição pessoal. Não foram inventadas métricas.
-- Confirmar os 20+ anos e fornecer experiências anteriores a 2009 e o período 2019–2022. A nova versão apresenta três experiências selecionadas, sem afirmar uma trajetória completa.
+- Experiência ajustada para 17+ anos, calculada a partir do início da trajetória em 2009. A versão apresenta três experiências selecionadas; o período 2019–2022 ainda pode ser detalhado futuramente.
 - Confirmar o total de dashboards/projetos externos à vitrine. Os números do topo agora refletem os 6 dashboards e 5 projetos publicados nesta seleção.
 - Confirmar previsão de conclusão e status atual de ADS e Python Impressionador. Os status existentes foram preservados porque não há dados para atualizá-los.
 - Informar data de conclusão e link do comprovante da formação Xperiun.
