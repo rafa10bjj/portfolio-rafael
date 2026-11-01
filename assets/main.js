@@ -67,10 +67,17 @@ if (whatsappForm) {
   whatsappForm.addEventListener('submit', (event) => {
     event.preventDefault();
 
-    const nome = document.getElementById('nome').value;
-    const empresa = document.getElementById('empresa').value;
-    const mensagem = document.getElementById('mensagem').value;
-    const texto = `Olá Rafael! Meu nome é ${nome} (${empresa}).\n\n${mensagem}`;
+    const nome = document.getElementById('nome').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const empresa = document.getElementById('empresa').value.trim();
+    const mensagem = document.getElementById('mensagem').value.trim();
+    const texto = [
+      `Olá Rafael! Meu nome é ${nome}.`,
+      `E-mail: ${email}`,
+      ...(empresa ? [`Empresa: ${empresa}`] : []),
+      '',
+      mensagem
+    ].join('\n');
     const url = `https://wa.me/5581995046827?text=${encodeURIComponent(texto)}`;
 
     window.open(url, '_blank', 'noopener,noreferrer');

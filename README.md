@@ -6,7 +6,7 @@
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![SQL](https://img.shields.io/badge/SQL_Server-CC292B?style=for-the-badge&logo=microsoftsqlserver&logoColor=white)
 
-Portfólio profissional de **Rafael Rodrigues**, Analista de Dados & BI com mais de 17 anos de experiência prática desde 2009, conectando inteligência analítica, operações e cadeia de suprimentos (*Supply Chain*).
+Portfólio profissional de **Rafael Rodrigues**, Analista de Dados & BI com atuação profissional desde 2009, conectando inteligência analítica, operações e cadeia de suprimentos (*Supply Chain*).
 
 ---
 
@@ -16,7 +16,7 @@ Desenvolvido com foco em alta performance, usabilidade e design editorial limpo 
 
 - **11 Projetos Práticos & Dashboards:** Acesso direto aos relatórios públicos interativos no **Power BI Service** e aos códigos-fonte e modelos no **GitHub**.
 - **Filtro Dinâmico em Tempo Real:** Alternância instantânea entre *Todos os Projetos (11)*, *Power BI (6)* e *Python & SQL (5)*.
-- **Trajetória Profissional Estruturada:** Linha do tempo com marcos corporativos (*Kiosk Brands*, *Fattu do Brasil*, *Focus Distribuidora*).
+- **Trajetória Profissional Estruturada:** Atuação desde 2009, com uma seleção das experiências mais relevantes (*Kiosk Brands*, *Fattu do Brasil*, *Focus Distribuidora*). A trajetória inclui outras empresas e funções não apresentadas no portfólio.
 - **Habilidades & IA:** Engenharia de BI, automações em Python, modelagem relacional SQL e **Engenharia de Prompt com Agentes de IA**.
 - **Contato Imediato:** Formulário com gerador automático de mensagem e redirecionamento direto para o WhatsApp.
 
