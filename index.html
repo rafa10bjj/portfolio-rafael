@@ -693,7 +693,7 @@ html {
 <!-- 3) SEÇÃO: PROJETOS & DASHBOARDS            -->
 <!-- ========================================== -->
 <section class="px-4 py-16 sm:px-8 sm:py-24 lg:px-20 xl:px-24 bg-white border-t border-neutral-200" id="projetos">
-<div class="max-w-6xl mx-auto">
+<div class="max-w-[1600px] mx-auto">
 
 <div class="mb-8 sm:mb-12">
   <div class="flex items-center gap-3 mb-4 sm:mb-6">
@@ -707,10 +707,10 @@ html {
 <!-- Category Tabs -->
 <div aria-label="Filtrar projetos por tecnologia" class="flex flex-wrap gap-2 mb-8 sm:mb-12" role="group">
   <button aria-pressed="true" class="filter-btn px-4 py-2 rounded-full text-xs font-geist-mono font-medium transition-all bg-neutral-900 text-white cursor-pointer shadow-sm" data-project-filter="all" type="button">
-    Todos os Projetos (11)
+    Todos os Projetos (12)
   </button>
   <button aria-pressed="false" class="filter-btn px-4 py-2 rounded-full text-xs font-geist-mono font-medium transition-all bg-neutral-100 text-neutral-600 hover:bg-neutral-200 cursor-pointer" data-project-filter="powerbi" type="button">
-    Power BI (6)
+    Power BI (7)
   </button>
   <button aria-pressed="false" class="filter-btn px-4 py-2 rounded-full text-xs font-geist-mono font-medium transition-all bg-neutral-100 text-neutral-600 hover:bg-neutral-200 cursor-pointer" data-project-filter="python" type="button">
     Python &amp; SQL (5)
@@ -718,9 +718,37 @@ html {
 </div>
 <p aria-live="polite" class="sr-only" id="filter-status"></p>
 
-<!-- 11 Projects Grid -->
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8" id="projects-grid">
+<!-- 12 Projects Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8" id="projects-grid">
 
+  <!-- Projeto em destaque: BI de Suprimentos -->
+  <div class="project-card group bg-white border border-neutral-200 rounded-2xl p-5 sm:p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="powerbi">
+    <div>
+      <a href="assets/Suprimentos-compras.png" target="_blank" rel="noopener noreferrer" class="block h-44 sm:h-48 rounded-xl overflow-hidden relative mb-4 sm:mb-5 border border-neutral-200 bg-neutral-100" aria-label="Ampliar capa Performance de Compras">
+        <img src="assets/Suprimentos-compras.png" alt="Performance de Compras: entrada do BI de Suprimentos e navegação pelos módulos" class="w-full h-full object-contain" decoding="async" loading="lazy" width="1348" height="757">
+      </a>
+      <h3 class="text-lg sm:text-xl font-bold text-neutral-900 mb-2 group-hover:text-blue-600 transition-colors">BI de Suprimentos</h3>
+      <p class="text-neutral-600 text-xs leading-relaxed font-geist-mono mb-4">Acompanhamento integrado de compras, pedidos e fornecedores, com indicadores de prazos, atrasos e faturamento. Integra dados de notas fiscais para investigar o ciclo do pedido ao recebimento.</p>
+      <div class="flex flex-wrap gap-1.5 mb-4">
+        <span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Power BI</span>
+        <span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Python</span>
+        <span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Suprimentos</span>
+        <span class="px-2.5 py-0.5 text-[10px] bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full font-geist-mono">Lead time</span>
+      </div>
+      <p class="text-[11px] text-neutral-500 font-geist-mono mb-4">Demonstração com dados fictícios.</p>
+      <details class="mb-6 text-xs font-geist-mono text-neutral-600">
+        <summary class="cursor-pointer hover:text-blue-600">Ver mais 2 telas</summary>
+        <div class="grid grid-cols-2 gap-2 mt-3">
+          <a href="assets/Vis%C3%A3o%20Geral%20Suprimentos.png" target="_blank" rel="noopener noreferrer" class="hover:text-blue-600"><img src="assets/Vis%C3%A3o%20Geral%20Suprimentos.png" alt="Visão geral de compras, fornecedores, prazos e status de entrega" class="w-full rounded-md border border-neutral-200 mb-1" loading="lazy">Visão geral ↗</a>
+          <a href="assets/Menu%20retratil.png" target="_blank" rel="noopener noreferrer" class="hover:text-blue-600"><img src="assets/Menu%20retratil.png" alt="Menu retrátil de navegação no painel de pedidos" class="w-full rounded-md border border-neutral-200 mb-1" loading="lazy">Menu e pedidos ↗</a>
+        </div>
+      </details>
+    </div>
+    <div class="pt-4 border-t border-neutral-100 flex items-center justify-between gap-2">
+      <a class="text-xs font-bold text-neutral-900 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-geist-mono" href="https://app.powerbi.com/view?r=eyJrIjoiOThiZjlhZjAtODM5Yi00YmM1LWJkMzAtYTlkZjgyNjA1N2YyIiwidCI6ImY1MDM4NzBkLTBhYWUtNDI1Mi05ZjE1LWQ2MTg5NmY5ZjZmZiJ9" target="_blank" rel="noopener noreferrer">Acessar Relatório <i class="w-3.5 h-3.5" data-lucide="arrow-up-right"></i></a>
+      <span class="text-[11px] text-neutral-400 font-geist-mono">Power BI Service</span>
+    </div>
+  </div>
   <!-- Project 1: Performance de Vendas -->
   <div class="project-card group bg-white border border-neutral-200 rounded-2xl p-5 sm:p-6 hover:shadow-xl hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between" data-category="powerbi">
     <div>
